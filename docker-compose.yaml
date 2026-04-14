@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  # 3 Symmetric Backends
+  backend-1:
+    build: ./backend
+    environment:
+      - SERVER_ID=B1
+  backend-2:
+    build: ./backend
+    environment:
+      - SERVER_ID=B2
+  backend-3:
+    build: ./backend
+    environment:
+      - SERVER_ID=B3
+
+  # 3 Load Balancers (for multi-LB sticky replication tests)
+  lb-1:
+    build: ./lb
+    ports:
+      - "8081:8080"
+    environment:
+      - ALGO=maglev
+  lb-2:
+    build: ./lb
+    ports:
+      - "8082:8080"
+    environment:
+      - ALGO=maglev
+  lb-3:
+    build: ./lb
+    ports:
+      - "8083:8080"
+    environment:
+      - ALGO=maglev
