@@ -3,14 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-<<<<<<< Updated upstream
-	"log"
-	"net/http"
-	"os"
-	"time"
-)
-
-=======
 	"crypto/aes"
 	"crypto/cipher"
 	crypto_rand "crypto/rand"
@@ -18,7 +10,6 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	// "os"
 	"runtime"
 	"strings"
 	"time"
@@ -26,8 +17,6 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 )
 
-
->>>>>>> Stashed changes
 func ensureTraceID(r *http.Request, w http.ResponseWriter) string {
 	traceID := r.Header.Get("X-Trace-ID")
 	if traceID == "" {
@@ -51,20 +40,6 @@ func logBackendRequest(serverID string, r *http.Request, status int, extra strin
 	)
 }
 
-<<<<<<< Updated upstream
-func main() {
-	serverID := os.Getenv("SERVER_ID")
-	port := "8080"
-
-	// /health - for LB health probing
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		ensureTraceID(r, w)
-		w.Header().Set("X-Server-ID", serverID)
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, "OK")
-		logBackendRequest(serverID, r, http.StatusOK, "health=true")
-	})
-=======
 func formatBytes(b uint64) string {
 	const unit = 1024
 	if b < unit {
@@ -81,81 +56,62 @@ func formatBytes(b uint64) string {
 func main() {
 	go collectMetrics()
 
-	// serverID := os.Getenv("SERVER_ID")
-	//Testing
 	serverID := "test-backend"
 	port := "8088"
 
-	// /health - for LB health probing
+	// ---------------- HEALTH ----------------
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("X-Slow") == "true" {
-		delay := time.Duration(100/runtime.NumCPU()) * time.Millisecond
-		time.Sleep(delay)
-	}
+		if r.Header.Get("X-Slow") == "true" {
+			delay := time.Duration(100/runtime.NumCPU()) * time.Millisecond
+			time.Sleep(delay)
+		}
 
-	ensureTraceID(r, w)
-	w.Header().Set("X-Server-ID", serverID)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+		ensureTraceID(r, w)
+		w.Header().Set("X-Server-ID", serverID)
+		w.Header().Set("Content-Type", "application/json")
 
-	// get rolling averages
-	cpuAvg, netSent, netRecv, diskRead, diskWrite := getAverages()
+		cpuAvg, netSent, netRecv, diskRead, diskWrite := getAverages()
+		vmStat, _ := mem.VirtualMemory()
 
-	// memory snapshot (current)
-	vmStat, _ := mem.VirtualMemory()
+		fmt.Fprintf(w, `{
+			"status":"OK",
+			"server":"%s",
+			"cpu_avg_%ds": "%.2f%%",
+			"memory_usage": "%.2f%%",
+			"ram_used": "%s",
+			"goroutines": %d,
+			"network_sent_per_%ds": "%s",
+			"network_recv_per_%ds": "%s",
+			"disk_read_per_%ds": "%s",
+			"disk_write_per_%ds": "%s"
+		}`,
+			serverID,
+			HEART_BEAT,
+			cpuAvg,
+			vmStat.UsedPercent,
+			formatBytes(vmStat.Used),
+			runtime.NumGoroutine(),
+			HEART_BEAT, formatBytes(netSent),
+			HEART_BEAT, formatBytes(netRecv),
+			HEART_BEAT, formatBytes(diskRead),
+			HEART_BEAT, formatBytes(diskWrite),
+		)
 
-	fmt.Fprintf(w, `{
-		"status":"OK",
-		"server":"%s",
-		"cpu_avg_%ds": "%.2f%%",
-		"memory_usage": "%.2f%%",
-		"ram_used": "%s",
-		"goroutines": %d,
-		"network_sent_per_%ds": "%s",
-		"network_recv_per_%ds": "%s",
-		"disk_read_per_%ds": "%s",
-		"disk_write_per_%ds": "%s"
-	}`,
-		serverID,
-		HEART_BEAT,
-		cpuAvg,
-		vmStat.UsedPercent,
-		formatBytes(vmStat.Used),
-		runtime.NumGoroutine(),
-		HEART_BEAT, formatBytes(netSent),
-		HEART_BEAT, formatBytes(netRecv),
-		HEART_BEAT, formatBytes(diskRead),
-		HEART_BEAT, formatBytes(diskWrite),
-	)
+		logBackendRequest(serverID, r, http.StatusOK, "health=true heartbeat")
+	})
 
-	logBackendRequest(serverID, r, http.StatusOK, "health=true heartbeat")
-})
->>>>>>> Stashed changes
-
-	// /chat - GPT-style chat endpoint
-	// Reads X-Chat-ID header, supports X-Slow: true for HoL blocking tests
+	// ---------------- CHAT ----------------
 	http.HandleFunc("/chat", func(w http.ResponseWriter, r *http.Request) {
 		traceID := ensureTraceID(r, w)
 		r.Header.Set("X-Trace-ID", traceID)
+
 		chatID := r.Header.Get("X-Chat-ID")
-<<<<<<< Updated upstream
-		if r.Header.Get("X-Slow") == "true" {
-			time.Sleep(200 * time.Millisecond)
-		}
-		w.Header().Set("X-Server-ID", serverID)
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"server":"%s","chat_id":"%s","status":"ok","ack":"ack from %s for trace %s"}`,
-			serverID,
-			chatID,
-			serverID,
-			traceID,
-=======
 
 		body, _ := io.ReadAll(r.Body)
 		defer r.Body.Close()
 
 		words := strings.Fields(string(body))
-		
+
 		if r.Header.Get("X-Slow") == "true" {
 			delay := time.Duration(len(words)*50) * time.Millisecond
 			if delay == 0 {
@@ -163,72 +119,70 @@ func main() {
 			}
 			time.Sleep(delay)
 		}
+
 		rand.Shuffle(len(words), func(i, j int) { words[i], words[j] = words[j], words[i] })
 		rearranged := strings.Join(words, " ")
+
 		if rearranged == "" {
 			rearranged = "[no words received to rearrange]"
 		}
 
 		w.Header().Set("X-Server-ID", serverID)
 		w.Header().Set("Content-Type", "application/json")
+
 		fmt.Fprintf(w, `{"server":"%s","chat_id":"%s","status":"ok","rearranged":%q}`,
 			serverID,
 			chatID,
 			rearranged,
->>>>>>> Stashed changes
 		)
+
 		logBackendRequest(serverID, r, http.StatusOK, "endpoint=chat")
 	})
 
-	// /payload - echoes body size back; used for multi-packet / large payload tests
+	// ---------------- PAYLOAD ----------------
 	http.HandleFunc("/payload", func(w http.ResponseWriter, r *http.Request) {
-<<<<<<< Updated upstream
-=======
 		if r.Header.Get("X-Slow") == "true" {
 			time.Sleep(200 * time.Millisecond)
 		}
->>>>>>> Stashed changes
+
 		traceID := ensureTraceID(r, w)
 		r.Header.Set("X-Trace-ID", traceID)
+
 		body, _ := io.ReadAll(r.Body)
 		defer r.Body.Close()
-<<<<<<< Updated upstream
-		w.Header().Set("X-Server-ID", serverID)
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"server":"%s","bytes_received":%d,"ack":"ack from %s for trace %s"}`,
-			serverID,
-			len(body),
-			serverID,
-			traceID,
-=======
 
-		customMessage := fmt.Sprintf("Hey! You have reached this service %s at this time %s. Request payload: %s",
-			serverID, time.Now().Format(time.RFC3339), string(body))
+		customMessage := fmt.Sprintf(
+			"Hey! You have reached this service %s at this time %s. Request payload: %s",
+			serverID, time.Now().Format(time.RFC3339), string(body),
+		)
 
 		w.Header().Set("X-Server-ID", serverID)
 		w.Header().Set("Content-Type", "application/json")
+
 		fmt.Fprintf(w, `{"server":"%s","message":%q,"size_received":"%s"}`,
 			serverID,
 			customMessage,
 			formatBytes(uint64(len(body))),
->>>>>>> Stashed changes
 		)
-		logBackendRequest(serverID, r, http.StatusOK, fmt.Sprintf("endpoint=payload bytes=%d", len(body)))
+
+		logBackendRequest(serverID, r, http.StatusOK,
+			fmt.Sprintf("endpoint=payload bytes=%d", len(body)))
 	})
 
-<<<<<<< Updated upstream
-=======
-	// /encrypt - aes-128 encryption of payload
+	// ---------------- ENCRYPT ----------------
 	http.HandleFunc("/encrypt", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Slow") == "true" {
 			time.Sleep(150 * time.Millisecond)
 		}
+
 		traceID := ensureTraceID(r, w)
 		r.Header.Set("X-Trace-ID", traceID)
+
 		body, _ := io.ReadAll(r.Body)
 		defer r.Body.Close()
 
-		key := []byte("thisis16byteskey") // Fixed AES-128 key
+		key := []byte("thisis16byteskey")
+
 		block, err := aes.NewCipher(key)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -237,33 +191,36 @@ func main() {
 
 		ciphertext := make([]byte, aes.BlockSize+len(body))
 		iv := ciphertext[:aes.BlockSize]
-		
-		// Use crypto_rand to securely generate a random IV
+
 		if _, err := io.ReadFull(crypto_rand.Reader, iv); err != nil {
-			http.Error(w, "Failed to generate random IV: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		
+
 		stream := cipher.NewCFBEncrypter(block, iv)
 		stream.XORKeyStream(ciphertext[aes.BlockSize:], body)
 
 		w.Header().Set("X-Server-ID", serverID)
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"server":"%s","plain_text":"%s","encrypted_hex":"%s"}`, serverID, string(body), hex.EncodeToString(ciphertext))
+
+		fmt.Fprintf(w, `{"server":"%s","plain_text":"%s","encrypted_hex":"%s"}`,
+			serverID,
+			string(body),
+			hex.EncodeToString(ciphertext),
+		)
+
 		logBackendRequest(serverID, r, http.StatusOK, "endpoint=encrypt")
 	})
 
->>>>>>> Stashed changes
-	// / - default catch-all (for stress-test.js baseline)
+	// ---------------- DEFAULT ----------------
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		traceID := ensureTraceID(r, w)
 		r.Header.Set("X-Trace-ID", traceID)
+
 		w.Header().Set("X-Server-ID", serverID)
-<<<<<<< Updated upstream
-		fmt.Fprintf(w, "ACK: %s", serverID)
-=======
+
 		fmt.Fprintf(w, "Welcome to the load balancer! (Handled by: %s)", serverID)
->>>>>>> Stashed changes
+
 		logBackendRequest(serverID, r, http.StatusOK, "endpoint=default")
 	})
 
