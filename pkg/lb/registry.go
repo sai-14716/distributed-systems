@@ -1,6 +1,7 @@
 package lb
 
 import (
+	"encoding/json"
 	"log"
 	"math"
 	"math/rand"
@@ -157,15 +158,6 @@ func (r *Registry) GetEpoch() uint64 {
 	return atomic.LoadUint64(&r.Epoch)
 }
 
-func (r *Registry) IncrementActive(b *Backend) {
-	atomic.AddInt32(&b.Stats.ActiveRequests, 1)
-	atomic.AddInt64(&b.Stats.TotalRequests, 1)
-}
-
-func (r *Registry) DecrementActive(b *Backend) {
-	atomic.AddInt32(&b.Stats.ActiveRequests, -1)
-}
-
 // SimulateBackendFailure marks a backend unhealthy from the Controller side.
 // In production, the Raft/Controller team provides real health signals.
 func (r *Registry) SimulateBackendFailure(id string, healthy bool) {
@@ -184,18 +176,49 @@ func (r *Registry) SimulateBackendFailure(id string, healthy bool) {
 // Updates weights (N(0,1)) and prints shared-memory state every second.
 func (r *Registry) StartController() {
 	go func() {
+		client := &http.Client{Timeout: 500 * time.Millisecond}
 		for {
 			time.Sleep(1 * time.Second)
-			r.mu.Lock()
-			for _, b := range r.Backends {
+			
+			r.mu.RLock()
+			var backends []*Backend
+			backends = append(backends, r.Backends...)
+			r.mu.RUnlock()
+
+			for _, b := range backends {
+				var active, total int64
+				healthy := false
+				resp, err := client.Get(b.URL.String() + "/health")
+				if err == nil {
+					if resp.StatusCode == 200 {
+						var res struct {
+							Status         string `json:"status"`
+							ActiveRequests int64  `json:"active_requests"`
+							TotalRequests  int64  `json:"total_requests"`
+						}
+						if err := json.NewDecoder(resp.Body).Decode(&res); err == nil {
+							healthy = (res.Status == "OK")
+							active = res.ActiveRequests
+							total = res.TotalRequests
+						}
+					}
+					resp.Body.Close()
+				}
+
+				r.mu.Lock()
+				b.Stats.IsHealthy = healthy
+				if healthy {
+					atomic.StoreInt32(&b.Stats.ActiveRequests, int32(active))
+					atomic.StoreInt64(&b.Stats.TotalRequests, total)
+				}
 				b.Stats.Weight = math.Abs(rand.NormFloat64())
 				log.Printf("[Controller] -> %s Healthy: %v, ActiveReqs: %d, TotalReqs: %d, Weight: %.2f",
 					b.ID, b.Stats.IsHealthy,
 					atomic.LoadInt32(&b.Stats.ActiveRequests),
 					atomic.LoadInt64(&b.Stats.TotalRequests),
 					b.Stats.Weight)
+				r.mu.Unlock()
 			}
-			r.mu.Unlock()
 			atomic.AddUint64(&r.Epoch, 1)
 		}
 	}()

@@ -10,12 +10,28 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
-	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/shirou/gopsutil/v3/cpu"
 )
+
+var (
+	backendActiveRequests int32
+	backendTotalRequests  int64
+)
+
+func trackRequests(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&backendActiveRequests, 1)
+		atomic.AddInt64(&backendTotalRequests, 1)
+		defer atomic.AddInt32(&backendActiveRequests, -1)
+		h(w, r)
+	}
+}
 
 func ensureTraceID(r *http.Request, w http.ResponseWriter) string {
 	traceID := r.Header.Get("X-Trace-ID")
@@ -54,10 +70,14 @@ func formatBytes(b uint64) string {
 }
 
 func main() {
-	go collectMetrics()
-
-	serverID := "test-backend"
-	port := "8088"
+	serverID := os.Getenv("SERVER_ID")
+	if serverID == "" {
+		serverID = "test-backend"
+	}
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
 	// ---------------- HEALTH ----------------
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -70,38 +90,30 @@ func main() {
 		w.Header().Set("X-Server-ID", serverID)
 		w.Header().Set("Content-Type", "application/json")
 
-		cpuAvg, netSent, netRecv, diskRead, diskWrite := getAverages()
-		vmStat, _ := mem.VirtualMemory()
+		cpuPercents, err := cpu.Percent(0, false)
+		cpuPct := 0.0
+		if err == nil && len(cpuPercents) > 0 {
+			cpuPct = cpuPercents[0]
+		}
 
 		fmt.Fprintf(w, `{
 			"status":"OK",
 			"server":"%s",
-			"cpu_avg_%ds": "%.2f%%",
-			"memory_usage": "%.2f%%",
-			"ram_used": "%s",
-			"goroutines": %d,
-			"network_sent_per_%ds": "%s",
-			"network_recv_per_%ds": "%s",
-			"disk_read_per_%ds": "%s",
-			"disk_write_per_%ds": "%s"
+			"active_requests": %d,
+			"total_requests": %d,
+			"cpu_percent": %.2f
 		}`,
 			serverID,
-			HEART_BEAT,
-			cpuAvg,
-			vmStat.UsedPercent,
-			formatBytes(vmStat.Used),
-			runtime.NumGoroutine(),
-			HEART_BEAT, formatBytes(netSent),
-			HEART_BEAT, formatBytes(netRecv),
-			HEART_BEAT, formatBytes(diskRead),
-			HEART_BEAT, formatBytes(diskWrite),
+			atomic.LoadInt32(&backendActiveRequests),
+			atomic.LoadInt64(&backendTotalRequests),
+			cpuPct,
 		)
 
 		logBackendRequest(serverID, r, http.StatusOK, "health=true heartbeat")
 	})
 
 	// ---------------- CHAT ----------------
-	http.HandleFunc("/chat", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/chat", trackRequests(func(w http.ResponseWriter, r *http.Request) {
 		traceID := ensureTraceID(r, w)
 		r.Header.Set("X-Trace-ID", traceID)
 
@@ -113,11 +125,17 @@ func main() {
 		words := strings.Fields(string(body))
 
 		if r.Header.Get("X-Slow") == "true" {
-			delay := time.Duration(len(words)*50) * time.Millisecond
+			delay := 2000 * time.Millisecond
 			if delay == 0 {
-				delay = 100 * time.Millisecond
+				delay = 2000 * time.Millisecond
 			}
-			time.Sleep(delay)
+			end := time.Now().Add(delay)
+			for time.Now().Before(end) {
+				x := 14716.14716
+				for i := 0; i < 10000; i++ {
+					x = x/2.332114554858
+				}
+			}
 		}
 
 		rand.Shuffle(len(words), func(i, j int) { words[i], words[j] = words[j], words[i] })
@@ -137,12 +155,18 @@ func main() {
 		)
 
 		logBackendRequest(serverID, r, http.StatusOK, "endpoint=chat")
-	})
+	}))
 
 	// ---------------- PAYLOAD ----------------
-	http.HandleFunc("/payload", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/payload", trackRequests(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Slow") == "true" {
-			time.Sleep(200 * time.Millisecond)
+			end := time.Now().Add(200 * time.Millisecond)
+			for time.Now().Before(end) {
+				x := 1.0000001
+				for i := 0; i < 1000; i++ {
+					x *= x
+				}
+			}
 		}
 
 		traceID := ensureTraceID(r, w)
@@ -167,12 +191,18 @@ func main() {
 
 		logBackendRequest(serverID, r, http.StatusOK,
 			fmt.Sprintf("endpoint=payload bytes=%d", len(body)))
-	})
+	}))
 
 	// ---------------- ENCRYPT ----------------
-	http.HandleFunc("/encrypt", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/encrypt", trackRequests(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Slow") == "true" {
-			time.Sleep(150 * time.Millisecond)
+			end := time.Now().Add(150 * time.Millisecond)
+			for time.Now().Before(end) {
+				x := 1.0000001
+				for i := 0; i < 1000; i++ {
+					x *= x
+				}
+			}
 		}
 
 		traceID := ensureTraceID(r, w)
@@ -210,10 +240,10 @@ func main() {
 		)
 
 		logBackendRequest(serverID, r, http.StatusOK, "endpoint=encrypt")
-	})
+	}))
 
 	// ---------------- DEFAULT ----------------
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/", trackRequests(func(w http.ResponseWriter, r *http.Request) {
 		traceID := ensureTraceID(r, w)
 		r.Header.Set("X-Trace-ID", traceID)
 
@@ -222,7 +252,7 @@ func main() {
 		fmt.Fprintf(w, "Welcome to the load balancer! (Handled by: %s)", serverID)
 
 		logBackendRequest(serverID, r, http.StatusOK, "endpoint=default")
-	})
+	}))
 
 	fmt.Printf("Backend %s starting on :%s\n", serverID, port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {

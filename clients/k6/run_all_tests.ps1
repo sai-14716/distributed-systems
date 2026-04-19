@@ -18,7 +18,7 @@ $report = ".\results\phase1_l7_tests.md"
 )
 
 foreach ($name in $tests) {
-    $file = ".\k6\${name}.js"
+    $file = Join-Path $PSScriptRoot "${name}.js"
     Write-Host ""
     Write-Host "===== $name =====" -ForegroundColor Cyan
 

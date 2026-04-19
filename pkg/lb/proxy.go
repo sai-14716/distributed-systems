@@ -78,9 +78,7 @@ func (f *Forwarder) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	w.Header().Set("X-LB-Backend", target.ID)
 
-	f.Registry.IncrementActive(target)
-	defer f.Registry.DecrementActive(target)
-
+	// Removed Increment/Decrement active since backends now natively track requests
 	// Propagate real client IP for downstream L7 inspection
 	req.Header.Set("X-Forwarded-For", req.RemoteAddr)
 

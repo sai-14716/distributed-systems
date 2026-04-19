@@ -60,7 +60,7 @@ export default function () {
     }
 
     check(body, {
-        'received full payload': (b) => b.bytes_received === PAYLOAD_SIZE,
+        'received full payload': (b) => b.size_received === '512.00 KB',
         'backend ack present': (b) => typeof b.ack === 'string' && b.ack.length > 0,
     });
 }

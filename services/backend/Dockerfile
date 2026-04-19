@@ -4,7 +4,8 @@ WORKDIR /app
 # Initialize a module (required for modern Go builds)
 RUN go mod init backend
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o server main.go
+RUN go mod tidy
+RUN CGO_ENABLED=0 GOOS=linux go build -o server .
 
 # Stage 2: Final lightweight image
 FROM alpine:latest
