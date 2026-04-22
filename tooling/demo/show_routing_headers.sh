@@ -22,5 +22,8 @@ for i in $(seq 1 "$N"); do
       tolower($1) == "x-lb-chosen-active" {print $0}
       tolower($1) == "x-lb-chosen-cpu-bucket" {print $0}
     ' | tr -d '\r'
+  if [[ "$i" -lt "$N" ]]; then
+    sleep 0.5
+  fi
 done
 

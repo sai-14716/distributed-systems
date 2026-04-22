@@ -58,7 +58,7 @@ done)
 
 curl -sS -X POST "http://127.0.0.1:${LEADER_PORT}/admin/submit" \
   -H 'Content-Type: application/json' \
-  -d '{"type":"set_config","data":{"algorithm":"wrr","probe_interval_ms":1000,"health_threshold":0.8}}'
+  -d '{"type":"set_config","data":{"algorithm":"wrr","probe_interval_ms":1000}}'
 ```
 
 Verify the dataplane is using the new config:
@@ -66,6 +66,8 @@ Verify the dataplane is using the new config:
 ```bash
 curl -s http://127.0.0.1:8001/admin/status
 ```
+
+That status payload includes the Raft config and the current load snapshot, so you can see backend ownership, probe activity, and the global probe interval in one response.
 
 Show routing behavior changed (simplest visual check):
 
@@ -96,8 +98,12 @@ Demonstrate that algorithms behave differently under controlled conditions:
 # Least-Requests: short request should avoid the backend with more active requests
 bash tooling/demo/least_requests_demo.sh http://127.0.0.1:8001
 
-# Dynamic backend load: keeps changing heat across backend-1/2/3
+# Dynamic backend load: rotates hot load across all 10 backends (8081..8090 by default)
 bash tooling/demo/dynamic_backend_load.sh 90 3 1800 8
+
+# One-command demos: run dynamic load in background while printing per-request picks
+bash tooling/demo/least_requests_with_dynamic_load.sh http://127.0.0.1:8001 20
+bash tooling/demo/wrr_with_dynamic_load.sh http://127.0.0.1:8001 20
 ```
 
 With dynamic load running, send individual requests and inspect headers to observe algorithm behavior live:
@@ -112,7 +118,139 @@ Single-command version (runs all algorithm visibility demos):
 bash tooling/demo/run_all_algos_demo.sh http://127.0.0.1:8001 30
 ```
 
-## 2.2) Make health probing + propagation visible
+## 2.2) Show backend-to-LB assignment changes (ring ownership)
+
+Important distinction:
+- Algorithm config changes (`round_robin`, `wrr`, `least-req`, `least-load`, `maglev`) do not change ring ownership.
+- LB membership changes (LB added/removed) do change ring owner assignment.
+
+Capture a baseline ownership view (from one LB):
+
+```bash
+curl -s http://127.0.0.1:8001/admin/status | jq -r '
+  .load_view.backends
+  | to_entries
+  | map({
+      backend: .key,
+      owner: (.value.owner // .value.owners.primary // "-"),
+      owner_alive: (
+        .value.owner_alive
+        // .value.peer_alive[(.value.owner // .value.owners.primary // "")]
+        // false
+      )
+    })
+  | group_by(.owner)
+  | map({
+      owner: .[0].owner,
+      owner_alive: (.[0].owner_alive | tostring),
+      backends: (map(.backend) | sort | join(","))
+    })
+  | sort_by(.owner)
+  | .[]
+  | [
+      .owner,
+      .owner_alive,
+      .backends
+    ]
+  | @tsv' > /tmp/owners.before.tsv
+
+column -t -s $'\t' /tmp/owners.before.tsv
+```
+
+Now remove one LB (simulated by stopping a node), then compare:
+
+```bash
+docker compose stop node5
+sleep 5
+
+curl -s http://127.0.0.1:8001/admin/status | jq -r '
+  .load_view.backends
+  | to_entries
+  | map({
+      backend: .key,
+      owner: (.value.owner // .value.owners.primary // "-"),
+      owner_alive: (
+        .value.owner_alive
+        // .value.peer_alive[(.value.owner // .value.owners.primary // "")]
+        // false
+      )
+    })
+  | group_by(.owner)
+  | map({
+      owner: .[0].owner,
+      owner_alive: (.[0].owner_alive | tostring),
+      backends: (map(.backend) | sort | join(","))
+    })
+  | sort_by(.owner)
+  | .[]
+  | [
+      .owner,
+      .owner_alive,
+      .backends
+    ]
+  | @tsv' > /tmp/owners.after-stop.tsv
+
+diff -u /tmp/owners.before.tsv /tmp/owners.after-stop.tsv || true
+```
+
+Bring it back and compare again:
+
+```bash
+docker compose up -d node5
+sleep 5
+
+curl -s http://127.0.0.1:8001/admin/status | jq -r '
+  .load_view.backends
+  | to_entries
+  | map({
+      backend: .key,
+      owner: (.value.owner // .value.owners.primary // "-"),
+      owner_alive: (
+        .value.owner_alive
+        // .value.peer_alive[(.value.owner // .value.owners.primary // "")]
+        // false
+      )
+    })
+  | group_by(.owner)
+  | map({
+      owner: .[0].owner,
+      owner_alive: (.[0].owner_alive | tostring),
+      backends: (map(.backend) | sort | join(","))
+    })
+  | sort_by(.owner)
+  | .[]
+  | [
+      .owner,
+      .owner_alive,
+      .backends
+    ]
+  | @tsv' > /tmp/owners.after-recover.tsv
+
+diff -u /tmp/owners.after-stop.tsv /tmp/owners.after-recover.tsv || true
+```
+
+To preview true ring rebalance for explicit membership change (add/remove peers), use:
+
+```bash
+python3 tooling/demo/compare_ring_assignment.py \
+  --before-peers node1,node2,node3,node4,node5 \
+  --after-peers node1,node2,node3,node4
+
+python3 tooling/demo/compare_ring_assignment.py \
+  --before-peers node1,node2,node3,node4,node5 \
+  --after-peers node1,node2,node3,node4,node5,node6
+```
+
+One-command live capture (baseline -> stop node -> recover node -> diff snapshots):
+
+```bash
+bash tooling/demo/compare_ring_assignment.sh
+
+# Optional: custom LB URL, node to toggle, output directory
+bash tooling/demo/compare_ring_assignment.sh http://127.0.0.1:8001 node4 /tmp
+```
+
+## 2.3) Make health probing + propagation visible
 
 Watch probe and propagation activity from every LB node in real time:
 
@@ -121,12 +259,6 @@ bash tooling/demo/watch_health_propagation.sh 20
 ```
 
 Run this while creating load/failure conditions in another terminal, for example:
-
-```bash
-# Heat backend-3 through sticky /payload rule
-for i in $(seq 1 10); do
-  curl -s -o /dev/null http://127.0.0.1:8001/payload -H "X-Work-Ms: 1200" --data-binary x
-done
 
 # Or force health transition
 docker compose stop backend-3

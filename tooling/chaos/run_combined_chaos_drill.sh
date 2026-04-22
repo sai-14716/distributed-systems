@@ -82,8 +82,7 @@ log "sending config update while dropping leader"
   docker compose --profile tools run --rm admin \
     -targets "$TARGETS" \
     -algorithm "$CONFIG_ALGO_1" \
-    -probe-interval-ms 700 \
-    -health-threshold 0.70
+    -probe-interval-ms 700
 ) >"$DRILL_DIR/config_update_during_leader_drop.log" 2>&1 &
 ADMIN_PID="$!"
 
@@ -108,7 +107,6 @@ docker compose --profile tools run --rm admin \
   -targets "$TARGETS" \
   -algorithm "$CONFIG_ALGO_2" \
   -probe-interval-ms 900 \
-  -health-threshold 0.80 \
   >"$DRILL_DIR/config_update_after_failover.log" 2>&1
 
 log "dropping backend: $STOP_BACKEND"

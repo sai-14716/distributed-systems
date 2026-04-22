@@ -24,8 +24,9 @@ docker compose --profile loadtest up --build k6-client
 
 Backend load simulation + monitoring:
 - Backends do CPU-bound work per request (`WORK_MS`, default 50ms) and expose `/internal/load` with 10% CPU buckets.
-- Each LB owns a subset of backends (rendezvous hashing; primary+secondary) and gossips load deltas to every other LB via `/internal/lb/gossip`.
+- Each backend has a single LB owner (rendezvous hashing) that polls and gossips load deltas to every other LB via `/internal/lb/gossip`.
 - Load info is considered stale after 5s unless refreshed (owners refresh at least every 5s).
+- `/admin/status` returns the Raft config and the current load snapshot, including backend ownership and probe activity.
 
 Visualizing what happens (logs + JSONL):
 - LB logs include key=value events: `[lb-load] event=probe|publish|takeover|reclaim ...` and `[lb-gossip] event=send|recv ...`
@@ -177,7 +178,7 @@ LEADER=node1
 3. Trigger config update and stop the leader at nearly the same time.
 
 ```bash
-(docker compose --profile tools run --rm admin -algorithm wrr -probe-interval-ms 700 -health-threshold 0.70 &) \
+(docker compose --profile tools run --rm admin -algorithm wrr -probe-interval-ms 700 &) \
 ; sleep 0.2 \
 ; docker compose stop "$LEADER" \
 ; wait
@@ -195,7 +196,7 @@ done
 5. Re-run one config update to confirm convergence after failover.
 
 ```bash
-docker compose --profile tools run --rm admin -algorithm least-req -probe-interval-ms 900 -health-threshold 0.80
+docker compose --profile tools run --rm admin -algorithm least-req -probe-interval-ms 900
 ```
 
 Expected result:

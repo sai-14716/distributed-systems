@@ -182,7 +182,7 @@ func pushDataplaneConfig(baseURL string, cfg raft.Config, maxAttempts int, delay
 	var lastErr error
 	for i := 0; i < maxAttempts; i++ {
 		if err := applyDataplaneConfig(baseURL, cfg); err == nil {
-			log.Printf("pushed dataplane config: algorithm=%s probe_interval_ms=%d health_threshold=%.3f", cfg.Algorithm, cfg.ProbeIntervalMs, cfg.HealthThreshold)
+			log.Printf("pushed dataplane config: algorithm=%s probe_interval_ms=%d", cfg.Algorithm, cfg.ProbeIntervalMs)
 			return nil
 		} else {
 			lastErr = err

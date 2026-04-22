@@ -61,10 +61,14 @@ func (a *adminMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if r.URL.Path == "/admin/status" {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		payload := map[string]any{
 			"status": "ok",
 			"config": a.state.getConfig(),
-		})
+		}
+		if a.load != nil {
+			payload["load_view"] = a.load.Snapshot()
+		}
+		_ = json.NewEncoder(w).Encode(payload)
 		return
 	}
 
@@ -149,8 +153,8 @@ func startControlAPI(addr string, forwarder *lb.Forwarder, state *runtimeState) 
 
 		forwarder.SetAlgorithm(buildAlgorithm(cfg.Algorithm))
 		state.setConfig(cfg)
-		log.Printf("applied dataplane config: algorithm=%s probe_interval_ms=%d health_threshold=%.3f", cfg.Algorithm, cfg.ProbeIntervalMs, cfg.HealthThreshold)
-		log.Printf("[lb-control] trace=%s endpoint=/internal/config/apply status=200 algorithm=%s probe_interval_ms=%d health_threshold=%.3f", traceID, cfg.Algorithm, cfg.ProbeIntervalMs, cfg.HealthThreshold)
+		log.Printf("applied dataplane config: algorithm=%s probe_interval_ms=%d", cfg.Algorithm, cfg.ProbeIntervalMs)
+		log.Printf("[lb-control] trace=%s endpoint=/internal/config/apply status=200 algorithm=%s probe_interval_ms=%d", traceID, cfg.Algorithm, cfg.ProbeIntervalMs)
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "config": cfg})
 	})
 
@@ -187,7 +191,6 @@ func main() {
 	initialCfg := raft.Config{
 		Algorithm:       getenvDefault("ALGO", "round_robin"),
 		ProbeIntervalMs: 1000,
-		HealthThreshold: 0.8,
 	}
 
 	forwarder := lb.NewForwarder(registry, buildAlgorithm(initialCfg.Algorithm))
@@ -199,7 +202,6 @@ func main() {
 		selfPeer,
 		peers,
 		lb.ClusterLoadOptions{TTL: 5 * time.Second, RefreshEvery: 5 * time.Second},
-		func() float64 { return state.getConfig().HealthThreshold },
 		func() time.Duration {
 			ms := state.getConfig().ProbeIntervalMs
 			if ms <= 0 {

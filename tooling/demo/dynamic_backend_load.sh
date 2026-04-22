@@ -9,20 +9,26 @@ cd "$ROOT_DIR"
 # Usage:
 #   bash tooling/demo/dynamic_backend_load.sh [seconds] [phase_seconds] [base_work_ms] [peak_parallel]
 #
-# Example:
-#   bash tooling/demo/dynamic_backend_load.sh 90 3 1800 8
+# Defaults target 10 backends at 127.0.0.1:8081..8090.
+# Optional env overrides:
+#   BACKEND_URLS="http://127.0.0.1:8081,http://127.0.0.1:8082,..."
+#   BACKEND_COUNT=10
+#   BACKEND_PORT_BASE=8081
 
 TOTAL_SECS="${1:-60}"
-PHASE_SECS="${2:-3}"
+PHASE_SECS="${2:-0.5}"
 BASE_WORK_MS="${3:-1800}"
 PEAK_PARALLEL="${4:-8}"
-
-B1_URL="${BACKEND1_URL:-http://127.0.0.1:8081}"
-B2_URL="${BACKEND2_URL:-http://127.0.0.1:8082}"
-B3_URL="${BACKEND3_URL:-http://127.0.0.1:8083}"
+BACKEND_COUNT="${BACKEND_COUNT:-10}"
+BACKEND_PORT_BASE="${BACKEND_PORT_BASE:-8081}"
+BACKEND_URLS_CSV="${BACKEND_URLS:-}"
 
 if [[ "$TOTAL_SECS" -le 0 || "$PHASE_SECS" -le 0 || "$BASE_WORK_MS" -le 0 || "$PEAK_PARALLEL" -le 0 ]]; then
   echo "all numeric args must be > 0" >&2
+  exit 1
+fi
+if [[ "$BACKEND_COUNT" -le 0 || "$BACKEND_PORT_BASE" -le 0 ]]; then
+  echo "BACKEND_COUNT and BACKEND_PORT_BASE must be > 0" >&2
   exit 1
 fi
 
@@ -31,8 +37,23 @@ if [[ "$WARM_PARALLEL" -lt 1 ]]; then
   WARM_PARALLEL=1
 fi
 
+declare -a BACKEND_URLS
+if [[ -n "$BACKEND_URLS_CSV" ]]; then
+  IFS=',' read -r -a BACKEND_URLS <<<"$BACKEND_URLS_CSV"
+else
+  for i in $(seq 0 $(( BACKEND_COUNT - 1 ))); do
+    BACKEND_URLS+=("http://127.0.0.1:$(( BACKEND_PORT_BASE + i ))")
+  done
+fi
+
+backend_count="${#BACKEND_URLS[@]}"
+if [[ "$backend_count" -le 0 ]]; then
+  echo "no backends configured" >&2
+  exit 1
+fi
+
 launch_load() {
-  local name="$1"
+  local backend_name="$1"
   local url="$2"
   local count="$3"
   local work_ms="$4"
@@ -40,22 +61,14 @@ launch_load() {
 
   for i in $(seq 1 "$count"); do
     curl -s -o /dev/null "$url/payload" \
-      -H "X-Session-ID: dyn-${name}-p${phase}-r${i}" \
+      -H "X-Session-ID: dyn-${backend_name}-p${phase}-r${i}" \
       -H "X-Work-Ms: ${work_ms}" \
       --data-binary "x" &
   done
 }
 
 echo "dynamic load start: total=${TOTAL_SECS}s phase=${PHASE_SECS}s base_work_ms=${BASE_WORK_MS} peak_parallel=${PEAK_PARALLEL}"
-echo "targets: b1=${B1_URL} b2=${B2_URL} b3=${B3_URL}"
-
-declare -a pids=()
-cleanup() {
-  for p in "${pids[@]:-}"; do
-    kill "$p" 2>/dev/null || true
-  done
-}
-trap cleanup EXIT INT TERM
+echo "targets (${backend_count}): ${BACKEND_URLS[*]}"
 
 start_ts="$(date +%s)"
 phase=0
@@ -66,26 +79,20 @@ while :; do
     break
   fi
 
-  hot=$(( phase % 3 ))
-  c1="$WARM_PARALLEL"
-  c2="$WARM_PARALLEL"
-  c3="$WARM_PARALLEL"
-  if [[ "$hot" -eq 0 ]]; then
-    c1="$PEAK_PARALLEL"
-  elif [[ "$hot" -eq 1 ]]; then
-    c2="$PEAK_PARALLEL"
-  else
-    c3="$PEAK_PARALLEL"
-  fi
-
-  # Add slight per-phase jitter so bucket movement is easier to spot.
+  hot_idx=$(( phase % backend_count ))
   work_ms=$(( BASE_WORK_MS + (phase % 4) * 200 ))
 
-  echo "[$(date +%H:%M:%S)] phase=${phase} hot=backend-$((hot+1)) work_ms=${work_ms} parallel: b1=${c1} b2=${c2} b3=${c3}"
+  echo "[$(date +%H:%M:%S)] phase=${phase} hot=backend-$((hot_idx + 1)) work_ms=${work_ms}"
 
-  launch_load "b1" "$B1_URL" "$c1" "$work_ms" "$phase"
-  launch_load "b2" "$B2_URL" "$c2" "$work_ms" "$phase"
-  launch_load "b3" "$B3_URL" "$c3" "$work_ms" "$phase"
+  for idx in "${!BACKEND_URLS[@]}"; do
+    url="${BACKEND_URLS[$idx]}"
+    parallel="$WARM_PARALLEL"
+    if [[ "$idx" -eq "$hot_idx" ]]; then
+      parallel="$PEAK_PARALLEL"
+    fi
+    echo "  backend-$((idx + 1)) parallel=${parallel} url=${url}"
+    launch_load "b$((idx + 1))" "$url" "$parallel" "$work_ms" "$phase"
+  done
 
   wait
 

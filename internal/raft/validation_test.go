@@ -20,7 +20,6 @@ func TestValidateCommandNormalizesAliases(t *testing.T) {
 		Data: map[string]any{
 			"algorithm":         "weighted_round_robin",
 			"probe_interval_ms": float64(1000),
-			"health_threshold":  0.8,
 		},
 	}
 	if err := ValidateCommand(cmd); err != nil {
@@ -34,7 +33,6 @@ func TestValidateCommandNormalizesAliases(t *testing.T) {
 func TestValidateCommandRejectsOutOfRangeValues(t *testing.T) {
 	cases := []Command{
 		{Type: "set_config", Data: map[string]any{"probe_interval_ms": float64(10)}},
-		{Type: "set_config", Data: map[string]any{"health_threshold": float64(1.2)}},
 	}
 	for i := range cases {
 		cmd := cases[i]

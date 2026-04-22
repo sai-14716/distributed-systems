@@ -45,16 +45,6 @@ func ValidateCommand(cmd *Command) error {
 		}
 	}
 
-	if raw, ok := cmd.Data["health_threshold"]; ok {
-		v, ok := raw.(float64)
-		if !ok || math.IsNaN(v) || math.IsInf(v, 0) {
-			return fmt.Errorf("health_threshold must be a finite number")
-		}
-		if v <= 0 || v > 1 {
-			return fmt.Errorf("health_threshold out of range: %.4f (allowed: 0 < x <= 1)", v)
-		}
-	}
-
 	return nil
 }
 

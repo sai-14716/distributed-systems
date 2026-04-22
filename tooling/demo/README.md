@@ -44,6 +44,23 @@ Common flows:
   - `bash tooling/demo/watch_discovery_state.sh 20`
   - `bash tooling/demo/watch_discovery_state.sh 30 http://127.0.0.1:6701/debug/state`
 
+- Compare ring ownership before/after LB membership changes (add/remove peers):
+  - `python3 tooling/demo/compare_ring_assignment.py --before-peers node1,node2,node3,node4,node5 --after-peers node1,node2,node3,node4`
+  - `python3 tooling/demo/compare_ring_assignment.py --before-peers node1,node2,node3,node4,node5 --after-peers node1,node2,node3,node4,node5,node6`
+
+- Capture live ownership snapshots and diffs around one LB stop/recover event:
+  - `bash tooling/demo/compare_ring_assignment.sh`
+  - `bash tooling/demo/compare_ring_assignment.sh http://127.0.0.1:8001 node4 /tmp`
+
+- Run dynamic load across all backends (defaults to 10 targets on ports 8081..8090, 1.5s per phase):
+  - `bash tooling/demo/dynamic_backend_load.sh 90 1.5 1800 8`
+
+- Run least-requests with background dynamic load and show per-request picks:
+  - `bash tooling/demo/least_requests_with_dynamic_load.sh http://127.0.0.1:8001 20`
+
+- Run WRR with background dynamic load and show per-request picks:
+  - `bash tooling/demo/wrr_with_dynamic_load.sh http://127.0.0.1:8001 20`
+
 - Run all algorithm visibility demos in one shot:
   - `bash tooling/demo/run_all_algos_demo.sh http://127.0.0.1:8001 30`
 

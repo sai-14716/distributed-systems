@@ -7,8 +7,7 @@ import (
 )
 
 // hashRing is a basic consistent-hashing ring with virtual nodes.
-// Primary = first node clockwise from key hash.
-// Secondary = next distinct node clockwise.
+// Owner = first node clockwise from key hash.
 type hashRing struct {
 	points []ringPoint
 	nodes  []string
@@ -58,30 +57,14 @@ func newHashRing(peers []Peer, replicas int) (*hashRing, error) {
 	return &hashRing{points: points, nodes: ids}, nil
 }
 
-func (r *hashRing) owners(key string) (string, string) {
+func (r *hashRing) owner(key string) string {
 	if r == nil || len(r.points) == 0 {
-		return "", ""
-	}
-	if len(r.nodes) == 1 {
-		return r.nodes[0], r.nodes[0]
+		return ""
 	}
 	h := crc32.ChecksumIEEE([]byte(key))
 	idx := sort.Search(len(r.points), func(i int) bool { return r.points[i].h >= h })
 	if idx == len(r.points) {
 		idx = 0
 	}
-	primary := r.points[idx].nodeID
-	secondary := ""
-	// Walk clockwise until we find a different node.
-	for i := 1; i < len(r.points); i++ {
-		n := r.points[(idx+i)%len(r.points)].nodeID
-		if n != primary {
-			secondary = n
-			break
-		}
-	}
-	if secondary == "" {
-		secondary = primary
-	}
-	return primary, secondary
+	return r.points[idx].nodeID
 }

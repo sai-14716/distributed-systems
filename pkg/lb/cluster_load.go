@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net/http"
 	"net/url"
 	"sort"
@@ -98,13 +97,6 @@ func (o *ClusterLoadOptions) withDefaults() ClusterLoadOptions {
 	return out
 }
 
-type OwnerRole string
-
-const (
-	RolePrimary   OwnerRole = "primary"
-	RoleSecondary OwnerRole = "secondary"
-)
-
 // ClusterLoad is an all-to-all, delta-based dissemination mechanism:
 // - Each backend is "owned" by exactly one LB (rendezvous hashing).
 // - The owner polls the backend and broadcasts updates to every other LB.
@@ -117,8 +109,6 @@ type ClusterLoad struct {
 	started  time.Time
 	ring     *hashRing
 
-	// getThreshold returns a 0..1 overload threshold (e.g. 0.8 => bucket>=8 is unhealthy).
-	getThreshold func() float64
 	// getProbeEvery returns how often owners should poll their backends.
 	getProbeEvery func() time.Duration
 
@@ -127,7 +117,7 @@ type ClusterLoad struct {
 
 	mu sync.Mutex
 
-	// state includes backends we probe locally (primary-owned or secondary-watched).
+	// state includes only backends owned by this LB.
 	state map[string]*backendState // backend ID -> state
 
 	// view is the merged cluster view used for routing.
@@ -154,9 +144,7 @@ type recvSummary struct {
 type backendState struct {
 	backend *Backend
 
-	role OwnerRole
-
-	// Latest observed probe result (may be sampled by a secondary too).
+	// Latest observed probe result.
 	lastBucket int
 	lastActive int32
 	lastStatus LoadStatus
@@ -195,7 +183,7 @@ type viewState struct {
 	expires time.Time
 }
 
-func NewClusterLoad(registry *Registry, self Peer, peers []Peer, opts ClusterLoadOptions, getThreshold func() float64, getProbeEvery func() time.Duration) (*ClusterLoad, error) {
+func NewClusterLoad(registry *Registry, self Peer, peers []Peer, opts ClusterLoadOptions, getProbeEvery func() time.Duration) (*ClusterLoad, error) {
 	opts = opts.withDefaults()
 	if self.ID == "" || self.BaseURL == "" {
 		return nil, fmt.Errorf("cluster load requires self peer ID and BaseURL")
@@ -231,7 +219,6 @@ func NewClusterLoad(registry *Registry, self Peer, peers []Peer, opts ClusterLoa
 		opts:          opts,
 		started:       time.Now(),
 		ring:          ring,
-		getThreshold:  getThreshold,
 		getProbeEvery: getProbeEvery,
 		httpProbe:     &http.Client{Timeout: opts.ProbeTimeout},
 		httpGossip:    &http.Client{Timeout: opts.GossipTimeout},
@@ -258,20 +245,13 @@ func (c *ClusterLoad) initOwnership() {
 	now := time.Now()
 	backends := c.registry.GetBackends()
 	for _, b := range backends {
-		primary, secondary := c.ownersFor(b.ID)
-		role := OwnerRole("")
-		switch c.self.ID {
-		case primary:
-			role = RolePrimary
-		case secondary:
-			role = RoleSecondary
-		default:
+		owner := c.ownerFor(b.ID)
+		if owner != c.self.ID {
 			continue
 		}
 
 		c.state[b.ID] = &backendState{
 			backend:       b,
-			role:          role,
 			lastBucket:    0,
 			lastActive:    0,
 			lastStatus:    LoadUp,
@@ -292,7 +272,7 @@ func (c *ClusterLoad) initOwnership() {
 }
 
 func (c *ClusterLoad) Start() {
-	// Probe loop per locally-tracked backend (primary or secondary).
+	// Probe loop per locally-owned backend.
 	for backendID := range c.state {
 		id := backendID
 		go c.runProbeLoop(id)
@@ -351,15 +331,16 @@ func (c *ClusterLoad) Snapshot() LoadViewSnapshot {
 	backends := make(map[string]any, len(backendIDs))
 	for _, id := range backendIDs {
 		v := c.view[id]
-		primary, secondary := c.ownersFor(id)
-		role := "none"
-		if st, ok := c.state[id]; ok {
-			role = string(st.role)
-		}
+		owner := c.ownerFor(id)
 		entry := map[string]any{
-			"owners":     map[string]string{"primary": primary, "secondary": secondary},
-			"local_role": role,
-			"peer_alive": map[string]bool{primary: c.isPeerAliveLocked(primary, now), secondary: c.isPeerAliveLocked(secondary, now)},
+			"owner": owner,
+			"local_role": func() string {
+				if owner == c.self.ID {
+					return "owner"
+				}
+				return "none"
+			}(),
+			"owner_alive": c.isPeerAliveLocked(owner, now),
 		}
 		if st, ok := c.state[id]; ok && st != nil {
 			entry["local_probe"] = map[string]any{
@@ -437,8 +418,8 @@ func (c *ClusterLoad) HandleGossip(w http.ResponseWriter, r *http.Request) {
 		if msg.From != u.OwnerID {
 			continue
 		}
-		primary, secondary := c.ownersFor(u.BackendID)
-		if u.OwnerID != primary && u.OwnerID != secondary {
+		owner := c.ownerFor(u.BackendID)
+		if u.OwnerID != owner {
 			continue
 		}
 		if u.CPUBucket10 < 0 {
@@ -532,19 +513,9 @@ func (c *ClusterLoad) isPeerAliveLocked(peerID string, now time.Time) bool {
 }
 
 func (c *ClusterLoad) shouldPublishLocked(backendID string, st *backendState, now time.Time) bool {
-	primary, secondary := c.ownersFor(backendID)
-	switch st.role {
-	case RolePrimary:
-		return c.self.ID == primary
-	case RoleSecondary:
-		// Secondary publishes only when the primary is considered down (eventually consistent).
-		if c.self.ID != secondary {
-			return false
-		}
-		return !c.isPeerAliveLocked(primary, now)
-	default:
-		return false
-	}
+	_ = st
+	_ = now
+	return c.self.ID == c.ownerFor(backendID)
 }
 
 func (c *ClusterLoad) ensureEpochForPublishLocked(backendID string, st *backendState) {
@@ -562,11 +533,7 @@ func (c *ClusterLoad) ensureEpochForPublishLocked(backendID string, st *backendS
 		st.pubStatus = ""
 		st.lastPublished = time.Time{}
 
-		ev := "reclaim"
-		if st.role == RoleSecondary {
-			ev = "takeover"
-		}
-		log.Printf("[lb-load] event=%s self=%s backend=%s role=%s prev_owner=%s prev_epoch=%d new_epoch=%d", ev, c.self.ID, backendID, st.role, prevOwner, prevEpoch, st.epoch)
+		log.Printf("[lb-load] event=owner_reclaim self=%s backend=%s prev_owner=%s prev_epoch=%d new_epoch=%d", c.self.ID, backendID, prevOwner, prevEpoch, st.epoch)
 	}
 }
 
@@ -663,8 +630,7 @@ func (c *ClusterLoad) recordProbe(backendID string, bucket int, active int32, st
 	st.lastActive = active
 	st.lastStatus = status
 
-	// Only the active owner should update the shared view. Secondaries can probe, but do not publish
-	// unless the primary is considered down (local liveness).
+	// Only the owner updates shared view and publishes gossip for this backend.
 	if c.shouldPublishLocked(backendID, st, now) {
 		c.ensureEpochForPublishLocked(backendID, st)
 		// Keep local view fresh for our own routing decisions, even between gossips.
@@ -679,7 +645,7 @@ func (c *ClusterLoad) recordProbe(backendID string, bucket int, active int32, st
 		}
 	}
 	if changed {
-		log.Printf("[lb-load] event=probe self=%s backend=%s role=%s bucket=%d status=%s active=%d", c.self.ID, backendID, st.role, bucket, status, active)
+		log.Printf("[lb-load] event=probe self=%s backend=%s bucket=%d status=%s active=%d", c.self.ID, backendID, bucket, status, active)
 	}
 }
 
@@ -723,7 +689,7 @@ func (c *ClusterLoad) gossipOnce() {
 			st.pubStatus = st.lastStatus
 			st.pubActive = st.lastActive
 			st.lastPublished = now
-			log.Printf("[lb-load] event=publish self=%s backend=%s role=%s epoch=%d seq=%d bucket=%d status=%s", c.self.ID, id, st.role, st.epoch, st.seq, st.lastBucket, st.lastStatus)
+			log.Printf("[lb-load] event=publish self=%s backend=%s epoch=%d seq=%d bucket=%d status=%s", c.self.ID, id, st.epoch, st.seq, st.lastBucket, st.lastStatus)
 		} else if st.lastPublished.IsZero() {
 			// Ensure refresh scheduling works even if we haven't observed a "change".
 			st.lastPublished = now
@@ -848,19 +814,6 @@ func (c *ClusterLoad) runRegistryApplyLoop() {
 
 func (c *ClusterLoad) applyToRegistry() {
 	now := time.Now()
-	threshold := 0.8
-	if c.getThreshold != nil {
-		if v := c.getThreshold(); v > 0 && v <= 1 {
-			threshold = v
-		}
-	}
-	cutoffBucket := int(math.Floor(threshold * 10))
-	if cutoffBucket < 0 {
-		cutoffBucket = 0
-	}
-	if cutoffBucket > 10 {
-		cutoffBucket = 10
-	}
 
 	backends := c.registry.GetBackends()
 	c.mu.Lock()
@@ -873,7 +826,7 @@ func (c *ClusterLoad) applyToRegistry() {
 
 		if st != nil {
 			bucket = st.bucket
-			if st.expires.After(now) && st.status == LoadUp && st.bucket < cutoffBucket {
+			if st.expires.After(now) && st.status == LoadUp {
 				healthy = true
 			}
 		}
@@ -890,9 +843,9 @@ func (c *ClusterLoad) applyToRegistry() {
 	}
 }
 
-func (c *ClusterLoad) ownersFor(backendID string) (string, string) {
+func (c *ClusterLoad) ownerFor(backendID string) string {
 	if c == nil || c.ring == nil {
-		return "", ""
+		return ""
 	}
-	return c.ring.owners(backendID)
+	return c.ring.owner(backendID)
 }
