@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>DiscoveryFlow · Live</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet" />
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    :root {
+      --bg: #0d0f14;
+      --surface: #13161e;
+      --surface2: #1a1e2a;
+      --border: rgba(255, 255, 255, .07);
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --cyan: #22d3ee;
+      --green: #4ade80;
+      --yellow: #fbbf24;
+      --red: #f87171;
+      --purple: #a78bfa;
+      --glow-c: rgba(34, 211, 238, .18);
+      --glow-g: rgba(74, 222, 128, .18);
+      --radius: 12px;
+      --font: 'Inter', system-ui, sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+    }
+
+    html,
+    body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px
+    }
+
+    /* ── shell ── */
+    .shell {
+      display: grid;
+      grid-template-rows: 56px 1fr;
+      height: 100vh;
+      overflow: hidden
+    }
+
+    /* ── header ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -.4px
+    }
+
+    .logo span {
+      color: var(--cyan)
+    }
+
+    .pill {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 9px;
+      border-radius: 999px;
+      letter-spacing: .4px;
+      text-transform: uppercase
+    }
+
+    .pill-live {
+      background: rgba(74, 222, 128, .12);
+      color: var(--green);
+      border: 1px solid rgba(74, 222, 128, .3)
+    }
+
+    .pill-pause {
+      background: rgba(251, 191, 36, .1);
+      color: var(--yellow);
+      border: 1px solid rgba(251, 191, 36, .25)
+    }
+
+    .hdr-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap
+    }
+
+    .stats-row {
+      display: flex;
+      gap: 14px;
+      font-size: 12px;
+      color: var(--muted)
+    }
+
+    .sv {
+      font-weight: 700;
+      margin-left: 3px
+    }
+
+    #sv-ok {
+      color: var(--green)
+    }
+
+    #sv-fail {
+      color: var(--red)
+    }
+
+    #sv-lat {
+      color: var(--cyan)
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      font-family: var(--font);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 5px 14px;
+      transition: opacity .15s
+    }
+
+    button:hover {
+      opacity: .85
+    }
+
+    #btn-toggle {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border)
+    }
+
+    #btn-clear {
+      background: transparent;
+      color: var(--muted)
+    }
+
+    .rate-wrap {
+      display: flex;
+      align-items: center;
+      gap: 7px
+    }
+
+    .rate-wrap span:first-child {
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap
+    }
+
+    #rate-label {
+      font-size: 12px;
+      color: var(--cyan);
+      font-weight: 700;
+      min-width: 50px
+    }
+
+    #rate-slider {
+      width: 85px;
+      accent-color: var(--cyan);
+      cursor: pointer
+    }
+
+    /* ── main ── */
+    main {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 1px;
+      overflow: hidden;
+      background: var(--border)
+    }
+
+    .panel {
+      background: var(--bg);
+      overflow-y: auto;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px
+    }
+
+    .ptitle {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border)
+    }
+
+    /* ── flow cards ── */
+    .flow-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      animation: slideIn .3s ease;
+      transition: opacity .4s
+    }
+
+    .flow-card.dimmed {
+      opacity: .38
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(6px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    .fc-hdr {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 10px 13px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border)
+    }
+
+    .fc-badge {
+      width: 20px;
+      height: 20px;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700
+    }
+
+    .fc-trace {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap
+    }
+
+    .fc-time {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted)
+    }
+
+    .fc-body {
+      padding: 11px 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 9px
+    }
+
+    /* ── steps ── */
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px
+    }
+
+    .step-icon {
+      font-size: 15px;
+      width: 22px;
+      text-align: center;
+      flex-shrink: 0;
+      margin-top: 1px
+    }
+
+    .step-content {
+      flex: 1
+    }
+
+    .step-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .4px;
+      text-transform: uppercase;
+      margin-bottom: 3px
+    }
+
+    .step-detail {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted)
+    }
+
+    .step-msg {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--cyan);
+      background: rgba(34, 211, 238, .06);
+      border: 1px solid rgba(34, 211, 238, .15);
+      border-radius: 5px;
+      padding: 4px 8px;
+      margin-top: 4px;
+      word-break: break-all
+    }
+
+    /* ── DNS table ── */
+    .dns-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--mono);
+      font-size: 11px
+    }
+
+    .dns-table th {
+      color: var(--muted);
+      font-weight: 500;
+      text-align: left;
+      padding: 4px 7px;
+      border-bottom: 1px solid var(--border)
+    }
+
+    .dns-table td {
+      padding: 4px 7px;
+      border-radius: 4px
+    }
+
+    .dns-table tr.sel td {
+      background: rgba(74, 222, 128, .1);
+      color: var(--green);
+      font-weight: 600
+    }
+
+    .dns-table tr.sel td:first-child::before {
+      content: "▶ "
+    }
+
+    /* ── response chips ── */
+    .resp-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      align-items: center
+    }
+
+    .chip {
+      padding: 3px 9px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: var(--mono)
+    }
+
+    .c-status {
+      background: rgba(74, 222, 128, .09);
+      color: var(--green);
+      border: 1px solid rgba(74, 222, 128, .2)
+    }
+
+    .c-fail {
+      background: rgba(248, 113, 113, .09);
+      color: var(--red);
+      border: 1px solid rgba(248, 113, 113, .2)
+    }
+
+    .c-lb {
+      background: rgba(34, 211, 238, .1);
+      color: var(--cyan);
+      border: 1px solid rgba(34, 211, 238, .25)
+    }
+
+    .c-be {
+      background: rgba(74, 222, 128, .13);
+      color: var(--green);
+      border: 1px solid rgba(74, 222, 128, .3);
+      font-size: 12px
+    }
+
+    .c-lat {
+      background: rgba(167, 139, 250, .09);
+      color: var(--purple);
+      border: 1px solid rgba(167, 139, 250, .2)
+    }
+
+    /* ── response body box ── */
+    .resp-body {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-family: var(--font);
+      font-size: 12px;
+      max-height: 90px;
+      overflow-y: auto;
+      margin-top: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px
+    }
+
+    .rb-row {
+      display: flex;
+      gap: 8px;
+      align-items: baseline;
+      flex-wrap: wrap
+    }
+
+    .rb-k {
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+      flex-shrink: 0
+    }
+
+    .rb-v {
+      color: var(--text);
+      font-weight: 500;
+      word-break: break-all
+    }
+
+    /* ── backend grid ── */
+    .bg-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 10px
+    }
+
+    .bn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      transition: border-color .25s, box-shadow .25s, transform .2s;
+      position: relative;
+      overflow: hidden
+    }
+
+    .bn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, transparent 60%, rgba(255, 255, 255, .02));
+      pointer-events: none
+    }
+
+    .bn.active {
+      border-color: var(--green);
+      box-shadow: 0 0 0 1px var(--green), 0 0 18px var(--glow-g);
+      transform: translateY(-2px)
+    }
+
+    .bn.lb-act {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 1px var(--cyan), 0 0 18px var(--glow-c);
+      transform: translateY(-2px)
+    }
+
+    .bn-id {
+      font-weight: 700;
+      font-size: 12px;
+      font-family: var(--mono)
+    }
+
+    .bn-hits {
+      font-size: 11px;
+      color: var(--muted)
+    }
+
+    .bn-bar-wrap {
+      height: 3px;
+      background: var(--surface2);
+      border-radius: 99px;
+      overflow: hidden
+    }
+
+    .bn-bar {
+      height: 100%;
+      background: var(--green);
+      border-radius: 99px;
+      transition: width .4s ease;
+      width: 0%
+    }
+
+    .bn.lb-act .bn-bar {
+      background: var(--cyan)
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: scale(1);
+        opacity: .6
+      }
+
+      100% {
+        transform: scale(1.7);
+        opacity: 0
+      }
+    }
+
+    .pulse {
+      position: absolute;
+      top: 7px;
+      right: 7px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse .65s ease-out forwards
+    }
+
+    .bn.lb-act .pulse {
+      background: var(--cyan)
+    }
+
+    /* ── history ── */
+    .log-hdr,
+    .log-row {
+      display: grid;
+      grid-template-columns: 55px 55px 75px 1fr 70px 65px;
+      gap: 7px;
+      align-items: center;
+      padding: 5px 9px;
+      font-size: 11px;
+      font-family: var(--mono)
+    }
+
+    .log-hdr {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      color: var(--muted)
+    }
+
+    .log-row {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      animation: slideIn .2s ease
+    }
+
+    .ok {
+      color: var(--green)
+    }
+
+    .err {
+      color: var(--red)
+    }
+
+    .lb {
+      color: var(--cyan)
+    }
+
+    .be {
+      color: var(--green);
+      font-weight: 600
+    }
+
+    .lat {
+      color: var(--purple)
+    }
+
+    .t {
+      color: var(--muted);
+      font-size: 9px
+    }
+
+    .history-log {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 5px
+    }
+
+    /* ── conn dot ── */
+    .conn-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0
+    }
+
+    .conn-dot.on {
+      background: var(--green);
+      box-shadow: 0 0 5px var(--green)
+    }
+
+    .empty {
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+      padding: 36px 0
+    }
+
+    ::-webkit-scrollbar {
+      width: 4px
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 99px
+    }
+  </style>
+</head>
+
+<body>
+  <div class="shell">
+
+    <header>
+      <div class="conn-dot" id="dot"></div>
+      <div class="logo">Discovery<span>Flow</span></div>
+      <div id="stat-pill" class="pill pill-pause">Paused</div>
+      <div class="hdr-right">
+        <div
+          style="display:flex;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:2px 4px;margin-right:8px;gap:4px">
+          <select id="custom-ep"
+            style="background:transparent;color:var(--cyan);border:none;outline:none;font-size:12px;cursor:pointer">
+            <option value="/chat">/chat</option>
+            <option value="/encrypt">/encrypt</option>
+            <option value="/payload">/payload</option>
+          </select>
+          <input type="text" id="custom-msg" placeholder="Custom message..."
+            style="background:transparent;color:var(--text);border:none;outline:none;font-size:12px;width:150px">
+          <button id="btn-custom"
+            style="background:var(--green);color:#000;padding:2px 8px;font-size:11px;border-radius:4px;height:24px">Send</button>
+        </div>
+        <div class="stats-row">
+          <span>Total <span class="sv" id="sv-total">0</span></span>
+          <span>OK <span class="sv" id="sv-ok">0</span></span>
+          <span>Fail <span class="sv" id="sv-fail">0</span></span>
+          <span>Avg <span class="sv" id="sv-lat">—</span></span>
+        </div>
+        <div class="rate-wrap">
+          <span>Rate:</span>
+          <input type="range" id="rate-slider" min="1" max="10" value="1" step="1">
+          <span id="rate-label">1/sec</span>
+        </div>
+        <button id="btn-toggle">▶ Start</button>
+        <button id="btn-clear">Clear</button>
+      </div>
+    </header>
+
+    <main>
+      <!-- LEFT: flow cards -->
+      <div class="panel" id="flow-panel">
+        <div class="ptitle">Live Request Flow</div>
+        <div id="flow-list">
+          <div class="empty">Waiting for requests…</div>
+        </div>
+      </div>
+
+      <!-- RIGHT: backends + history -->
+      <div class="panel">
+        <div class="ptitle">Load Balancer Nodes</div>
+        <div class="bg-grid" id="bg-grid"></div>
+
+        <div class="ptitle" style="margin-top:6px">Request History</div>
+        <div class="log-hdr">
+          <span>TIME</span><span>STATUS</span><span>LB
+            NODE</span><span>BACKEND</span><span>LATENCY</span><span>TRACE</span>
+        </div>
+        <div class="history-log" id="hist-log">
+          <div class="empty" id="hist-empty">No requests yet</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const PROXY = `http://${location.hostname}:6700`;
+    let running = false, timer = null, evtSrc = null, intervalMs = 1000;
+    let stats = { total: 0, ok: 0, fail: 0, latSum: 0 };
+    let flows = {}, backends = {}, maxHits = 1;
+
+    const flowList = document.getElementById('flow-list');
+    const bgGrid = document.getElementById('bg-grid');
+    const histLog = document.getElementById('hist-log');
+    const dot = document.getElementById('dot');
+    const pill = document.getElementById('stat-pill');
+    const btnT = document.getElementById('btn-toggle');
+    const btnC = document.getElementById('btn-clear');
+    const rSlider = document.getElementById('rate-slider');
+    const rLabel = document.getElementById('rate-label');
+
+    /* ── SSE ── */
+    function connectSSE() {
+      if (evtSrc) { evtSrc.close(); evtSrc = null; }
+      evtSrc = new EventSource(`${PROXY}/events`);
+      evtSrc.onopen = () => dot.classList.add('on');
+      evtSrc.onerror = () => { dot.classList.remove('on'); setTimeout(connectSSE, 2000); };
+      evtSrc.onmessage = e => { try { handle(JSON.parse(e.data)); } catch { } };
+    }
+
+    /* ── event dispatch ── */
+    function handle(ev) {
+      const { step, type, trace } = ev;
+      if (step === 1) {
+        flowList.querySelector('.empty')?.remove();
+        const card = makeCard(ev);
+        flowList.prepend(card);
+        flows[trace] = card;
+        const all = flowList.querySelectorAll('.flow-card');
+        if (all.length > 6) all[all.length - 1].remove();
+        all.forEach((c, i) => { if (i > 0) c.classList.add('dimmed'); });
+        return;
+      }
+      const card = flows[trace];
+      if (step === 2 && type === 'dns') { dnsStep(card, ev); initBackends(ev.endpoints, ev.selected_idx); hlLB(ev.endpoints[ev.selected_idx]?.id); return; }
+      if (step === 3 && type === 'forward') { fwdStep(card, ev); return; }
+      if (step === 3 && type === 'retry') { retryStep(card, ev); return; }
+      if (step === 4 && type === 'response') { respStep(card, ev); addStats(ev); hlBackend(ev.backend); addHist(ev, trace); return; }
+      if (step === 5) { failStep(card, ev); stats.total++; stats.fail++; refreshStats(); addHist(ev, trace, true); }
+    }
+
+    /* ── card ── */
+    function makeCard(ev) {
+      const c = document.createElement('div');
+      c.className = 'flow-card';
+      const bodyPreview = ev.body_preview ? `<div class="step-msg">📤 ${esc(ev.body_preview)}</div>` : '';
+      c.innerHTML = `
+    <div class="fc-hdr">
+      <div class="fc-badge" style="background:rgba(34,211,238,.15);color:var(--cyan)">1</div>
+      <div class="fc-trace">${ev.trace}</div>
+      <div class="fc-time">${new Date().toLocaleTimeString()}</div>
+    </div>
+    <div class="fc-body">
+      <div class="step">
+        <div class="step-icon">🌐</div>
+        <div class="step-content">
+          <div class="step-label" style="color:var(--cyan)">HTTP Request</div>
+          <div class="step-detail">${ev.method} ${ev.service}${ev.path}</div>
+          ${bodyPreview}
+        </div>
+      </div>
+    </div>`;
+      return c;
+    }
+
+    function appendStep(card, html) {
+      card?.querySelector('.fc-body')?.insertAdjacentHTML('beforeend', html);
+    }
+
+    function dnsStep(card, ev) {
+      const rows = ev.endpoints.map((ep, i) =>
+        `<tr class="${i === ev.selected_idx ? 'sel' : ''}"><td>${ep.id || '?'}</td><td>${ep.ip}:${ep.port}</td></tr>`
+      ).join('');
+      appendStep(card, `
+    <div class="step">
+      <div class="step-icon">🔍</div>
+      <div class="step-content">
+        <div class="step-label" style="color:var(--purple)">Service Discovery</div>
+        <table class="dns-table">
+          <thead><tr><th>Node</th><th>Address</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`);
+    }
+
+    function fwdStep(card, ev) {
+      appendStep(card, `
+    <div class="step">
+      <div class="step-icon">🚀</div>
+      <div class="step-content">
+        <div class="step-label" style="color:var(--yellow)">Forwarding</div>
+        <div class="step-detail">→ LB Node: <strong style="color:var(--cyan)">${ev.lb}</strong></div>
+      </div>
+    </div>`);
+    }
+
+    function retryStep(card, ev) {
+      appendStep(card, `
+    <div class="step">
+      <div class="step-icon">🔄</div>
+      <div class="step-content">
+        <div class="step-label" style="color:var(--yellow)">Retry #${ev.attempt}</div>
+        <div class="step-detail">${ev.lb} — ${ev.error}</div>
+      </div>
+    </div>`);
+    }
+
+    function respStep(card, ev) {
+      const sc = ev.status < 400 ? 'c-status' : 'c-fail';
+      let bodyHtml = '';
+      if (ev.body) {
+        try {
+          const obj = JSON.parse(ev.body);
+          const skip = new Set(['server', 'chat_id', 'status', 'ack']);
+          const friendlyKey = {
+            rearranged: '🔀 Rearranged',
+            reply: '💬 Reply',
+            message: '📨 Message',
+            plain_text: '📝 Plain text',
+            encrypted_hex: '🔒 Encrypted',
+            size_received: '📦 Size',
+            bytes_received: '📦 Size',
+          };
+          const lines = Object.entries(obj)
+            .filter(([k]) => !skip.has(k))
+            .map(([k, v]) => {
+              const label = friendlyKey[k] || k;
+              const val = String(v).length > 120 ? String(v).slice(0, 120) + '…' : String(v);
+              return `<div class="rb-row"><span class="rb-k">${label}</span><span class="rb-v">${esc(val)}</span></div>`;
+            }).join('');
+          if (lines) bodyHtml = `<div class="resp-body">${lines}</div>`;
+        } catch {
+          const raw = ev.body.slice(0, 140) + (ev.body.length > 140 ? '…' : '');
+          bodyHtml = `<div class="resp-body"><span class="rb-v">${esc(raw)}</span></div>`;
+        }
+      }
+      appendStep(card, `
+    <div class="step">
+      <div class="step-icon">📥</div>
+      <div class="step-content">
+        <div class="step-label" style="color:var(--green)">Response</div>
+        <div class="resp-row">
+          <span class="chip ${sc}">${ev.status}</span>
+          <span class="chip c-lb">LB: ${ev.lb_node}</span>
+          <span class="chip c-be">⬢ ${ev.backend}</span>
+          <span class="chip c-lat">${ev.latency_ms}ms</span>
+        </div>
+        ${bodyHtml}
+      </div>
+    </div>`);
+    }
+
+    function failStep(card, ev) {
+      appendStep(card, `
+    <div class="step">
+      <div class="step-icon">💥</div>
+      <div class="step-content">
+        <div class="step-label" style="color:var(--red)">All Retries Failed</div>
+        <div class="step-detail">${ev.error || ''}</div>
+      </div>
+    </div>`);
+    }
+
+    /* ── backend grid ── */
+    function initBackends(endpoints) {
+      endpoints.forEach(ep => {
+        const id = ep.id || `${ep.ip}:${ep.port}`;
+        if (!backends[id]) {
+          const el = document.createElement('div');
+          el.className = 'bn'; el.id = `bn-${id}`;
+          el.innerHTML = `<div class="bn-id">${id}</div><div class="bn-hits">0 hits</div><div class="bn-bar-wrap"><div class="bn-bar"></div></div>`;
+          bgGrid.appendChild(el);
+          backends[id] = { el, hits: 0 };
+        }
+      });
+    }
+
+    function hlLB(id) {
+      Object.values(backends).forEach(b => b.el.classList.remove('lb-act', 'active'));
+      const b = backends[id];
+      if (!b) return;
+      b.el.classList.add('lb-act');
+      addPulse(b.el);
+    }
+
+    function hlBackend(id) {
+      Object.values(backends).forEach(b => b.el.classList.remove('active', 'lb-act'));
+      const b = backends[id];
+      if (!b) return;
+      b.hits++;
+      if (b.hits > maxHits) maxHits = b.hits;
+      b.el.classList.add('active');
+      b.el.querySelector('.bn-hits').textContent = `${b.hits} hit${b.hits !== 1 ? 's' : ''}`;
+      b.el.querySelector('.bn-bar').style.width = `${(b.hits / maxHits) * 100}%`;
+      addPulse(b.el);
+      setTimeout(() => b.el.classList.remove('active'), 900);
+    }
+
+    function addPulse(el) {
+      el.querySelector('.pulse')?.remove();
+      const p = document.createElement('div'); p.className = 'pulse';
+      el.appendChild(p); setTimeout(() => p.remove(), 650);
+    }
+
+    /* ── history ── */
+    function addHist(ev, trace, failed = false) {
+      document.getElementById('hist-empty')?.remove();
+      const t = new Date().toLocaleTimeString();
+      const row = document.createElement('div');
+      row.className = 'log-row';
+      if (failed) {
+        row.innerHTML = `<span class="t">${t}</span><span class="err">FAIL</span><span>—</span><span class="err">${(ev.error || '').slice(0, 30)}</span><span>—</span><span class="t">${trace.slice(0, 8)}</span>`;
+      } else {
+        const sc = ev.status < 400 ? 'ok' : 'err';
+        row.innerHTML = `<span class="t">${t}</span><span class="${sc}">${ev.status}</span><span class="lb">${ev.lb_node}</span><span class="be">${ev.backend}</span><span class="lat">${ev.latency_ms}ms</span><span class="t">${trace.slice(0, 8)}</span>`;
+      }
+      histLog.prepend(row);
+      const all = histLog.querySelectorAll('.log-row');
+      if (all.length > 40) all[all.length - 1].remove();
+    }
+
+    /* ── stats ── */
+    function addStats(ev) {
+      stats.total++; stats.ok++; stats.latSum += ev.latency_ms || 0;
+      refreshStats();
+    }
+    function refreshStats() {
+      document.getElementById('sv-total').textContent = stats.total;
+      document.getElementById('sv-ok').textContent = stats.ok;
+      document.getElementById('sv-fail').textContent = stats.fail;
+      const avg = stats.ok > 0 ? Math.round(stats.latSum / stats.ok) : 0;
+      document.getElementById('sv-lat').textContent = avg ? `${avg}ms` : '—';
+    }
+
+    /* ── rate slider ── */
+    rSlider.addEventListener('input', () => {
+      const v = parseInt(rSlider.value);
+      rLabel.textContent = `${v}/sec`;
+      intervalMs = 1000 / v;
+      if (running) { clearInterval(timer); timer = setInterval(send, intervalMs); }
+    });
+
+    /* ── controls ── */
+    function send(overrideMsg = null, overrideEp = null) {
+      const body = overrideMsg ? JSON.stringify({ message: overrideMsg, endpoint: overrideEp || '/chat' }) : '';
+      fetch(`${PROXY}/send`, {
+        method: 'POST',
+        headers: body ? { 'Content-Type': 'application/json' } : {},
+        body: body || null
+      }).catch(() => { });
+    }
+
+    const btnCstm = document.getElementById('btn-custom');
+    const inpCstm = document.getElementById('custom-msg');
+    const epCstm = document.getElementById('custom-ep');
+    btnCstm.addEventListener('click', () => {
+      if (inpCstm.value.trim()) send(inpCstm.value.trim(), epCstm.value);
+      inpCstm.value = '';
+    });
+    inpCstm.addEventListener('keyup', (e) => {
+      if (e.key === 'Enter') btnCstm.click();
+    });
+
+    function setRunning(r) {
+      running = r;
+      if (r) {
+        pill.textContent = 'Live'; pill.className = 'pill pill-live';
+        btnT.textContent = '⏸ Pause';
+        send(); timer = setInterval(send, intervalMs);
+      } else {
+        pill.textContent = 'Paused'; pill.className = 'pill pill-pause';
+        btnT.textContent = '▶ Start';
+        clearInterval(timer);
+      }
+    }
+
+    btnT.addEventListener('click', () => setRunning(!running));
+    btnC.addEventListener('click', () => {
+      flowList.innerHTML = '<div class="empty">Waiting for requests…</div>';
+      histLog.innerHTML = '<div class="empty" id="hist-empty">No requests yet</div>';
+      flows = {}; stats = { total: 0, ok: 0, fail: 0, latSum: 0 }; refreshStats();
+      Object.values(backends).forEach(b => {
+        b.hits = 0; b.el.querySelector('.bn-hits').textContent = '0 hits';
+        b.el.querySelector('.bn-bar').style.width = '0%';
+        b.el.classList.remove('active', 'lb-act');
+      });
+      maxHits = 1;
+    });
+
+    function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+    /* ── boot ── */
+    connectSSE();
+    setRunning(true);
+  </script>
+</body>
+
+</html>

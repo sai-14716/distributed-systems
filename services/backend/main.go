@@ -1,12 +1,12 @@
 package main
 
 import (
-	"fmt"
-	"io"
 	"crypto/aes"
 	"crypto/cipher"
 	crypto_rand "crypto/rand"
 	"encoding/hex"
+	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -77,6 +77,22 @@ func formatBytes(b uint64) string {
 	return fmt.Sprintf("%.2f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
+func sendHTML(w http.ResponseWriter, title, content string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, "<html><head><title>%s</title></head><body style=\"font-family:sans-serif;padding:20px;\"><h2>%s</h2>%s</body></html>", title, title, content)
+}
+
+// helper to read message from query (?q=...) with fallback to body
+func readMessage(r *http.Request) string {
+	msg := r.URL.Query().Get("q")
+	if msg == "" {
+		body, _ := io.ReadAll(r.Body)
+		defer r.Body.Close()
+		msg = string(body)
+	}
+	return msg
+}
+
 func main() {
 	serverID = os.Getenv("SERVER_ID")
 	if serverID == "" {
@@ -96,7 +112,6 @@ func main() {
 
 		ensureTraceID(r, w)
 		w.Header().Set("X-Server-ID", serverID)
-		w.Header().Set("Content-Type", "application/json")
 
 		cpuPercents, err := cpu.Percent(0, false)
 		cpuPct := 0.0
@@ -104,18 +119,9 @@ func main() {
 			cpuPct = cpuPercents[0]
 		}
 
-		fmt.Fprintf(w, `{
-			"status":"OK",
-			"server":"%s",
-			"active_requests": %d,
-			"total_requests": %d,
-			"cpu_percent": %.2f
-		}`,
-			serverID,
-			atomic.LoadInt32(&backendActiveRequests),
-			atomic.LoadInt64(&backendTotalRequests),
-			cpuPct,
-		)
+		content := fmt.Sprintf("<p><strong>Status:</strong> OK</p><p><strong>Server:</strong> %s</p><p><strong>Active Requests:</strong> %d</p><p><strong>Total Req:</strong> %d</p><p><strong>CPU:</strong> %.2f%%</p>",
+			serverID, atomic.LoadInt32(&backendActiveRequests), atomic.LoadInt64(&backendTotalRequests), cpuPct)
+		sendHTML(w, "Health Check", content)
 
 		logBackendRequest(serverID, r, http.StatusOK, "health=true heartbeat")
 	})
@@ -127,21 +133,16 @@ func main() {
 
 		chatID := r.Header.Get("X-Chat-ID")
 
-		body, _ := io.ReadAll(r.Body)
-		defer r.Body.Close()
-
-		words := strings.Fields(string(body))
+		msg := readMessage(r)
+		words := strings.Fields(msg)
 
 		if r.Header.Get("X-Slow") == "true" {
 			delay := 2000 * time.Millisecond
-			if delay == 0 {
-				delay = 2000 * time.Millisecond
-			}
 			end := time.Now().Add(delay)
 			for time.Now().Before(end) {
 				x := 14716.14716
 				for i := 0; i < 10000; i++ {
-					x = x/2.332114554858
+					x = x / 2.332114554858
 				}
 			}
 		}
@@ -154,13 +155,10 @@ func main() {
 		}
 
 		w.Header().Set("X-Server-ID", serverID)
-		w.Header().Set("Content-Type", "application/json")
 
-		fmt.Fprintf(w, `{"server":"%s","chat_id":"%s","status":"ok","rearranged":%q}`,
-			serverID,
-			chatID,
-			rearranged,
-		)
+		content := fmt.Sprintf("<p><strong>Server:</strong> %s</p><p><strong>Chat ID:</strong> %s</p><p><strong>Rearranged words:</strong></p><pre style=\"background:#eee;padding:10px;border-radius:4px;\">%s</pre>",
+			serverID, chatID, rearranged)
+		sendHTML(w, "Chat", content)
 
 		logBackendRequest(serverID, r, http.StatusOK, "endpoint=chat")
 	}))
@@ -180,25 +178,21 @@ func main() {
 		traceID := ensureTraceID(r, w)
 		r.Header.Set("X-Trace-ID", traceID)
 
-		body, _ := io.ReadAll(r.Body)
-		defer r.Body.Close()
+		msg := readMessage(r)
 
 		customMessage := fmt.Sprintf(
 			"Hey! You have reached this service %s at this time %s. Request payload: %s",
-			serverID, time.Now().Format(time.RFC3339), string(body),
+			serverID, time.Now().Format(time.RFC3339), msg,
 		)
 
 		w.Header().Set("X-Server-ID", serverID)
-		w.Header().Set("Content-Type", "application/json")
 
-		fmt.Fprintf(w, `{"server":"%s","message":%q,"size_received":"%s"}`,
-			serverID,
-			customMessage,
-			formatBytes(uint64(len(body))),
-		)
+		content := fmt.Sprintf("<p><strong>Server:</strong> %s</p><p><strong>Size Received:</strong> %s</p><p><strong>Message:</strong></p><pre style=\"background:#eee;padding:10px;border-radius:4px;\">%s</pre>",
+			serverID, formatBytes(uint64(len(msg))), customMessage)
+		sendHTML(w, "Payload", content)
 
 		logBackendRequest(serverID, r, http.StatusOK,
-			fmt.Sprintf("endpoint=payload bytes=%d", len(body)))
+			fmt.Sprintf("endpoint=payload bytes=%d", len(msg)))
 	}))
 
 	// ---------------- ENCRYPT ----------------
@@ -216,8 +210,7 @@ func main() {
 		traceID := ensureTraceID(r, w)
 		r.Header.Set("X-Trace-ID", traceID)
 
-		body, _ := io.ReadAll(r.Body)
-		defer r.Body.Close()
+		msg := readMessage(r)
 
 		key := []byte("thisis16byteskey")
 
@@ -227,7 +220,8 @@ func main() {
 			return
 		}
 
-		ciphertext := make([]byte, aes.BlockSize+len(body))
+		plaintext := []byte(msg)
+		ciphertext := make([]byte, aes.BlockSize+len(plaintext))
 		iv := ciphertext[:aes.BlockSize]
 
 		if _, err := io.ReadFull(crypto_rand.Reader, iv); err != nil {
@@ -236,16 +230,13 @@ func main() {
 		}
 
 		stream := cipher.NewCFBEncrypter(block, iv)
-		stream.XORKeyStream(ciphertext[aes.BlockSize:], body)
+		stream.XORKeyStream(ciphertext[aes.BlockSize:], plaintext)
 
 		w.Header().Set("X-Server-ID", serverID)
-		w.Header().Set("Content-Type", "application/json")
 
-		fmt.Fprintf(w, `{"server":"%s","plain_text":"%s","encrypted_hex":"%s"}`,
-			serverID,
-			string(body),
-			hex.EncodeToString(ciphertext),
-		)
+		content := fmt.Sprintf("<p><strong>Server:</strong> %s</p><p><strong>Plain text:</strong> %s</p><p><strong>Encrypted (Hex):</strong></p><pre style=\"background:#eee;padding:10px;border-radius:4px;word-break:break-all;\">%s</pre>",
+			serverID, msg, hex.EncodeToString(ciphertext))
+		sendHTML(w, "Encrypt", content)
 
 		logBackendRequest(serverID, r, http.StatusOK, "endpoint=encrypt")
 	}))
@@ -257,7 +248,8 @@ func main() {
 
 		w.Header().Set("X-Server-ID", serverID)
 
-		fmt.Fprintf(w, "Welcome to the load balancer! (Handled by: %s)", serverID)
+		content := fmt.Sprintf("<p>Welcome to the load balancer!</p><p>Handled by: <strong>%s</strong></p><p>Trace: <code>%s</code></p>", serverID, traceID)
+		sendHTML(w, "Backend Node", content)
 
 		logBackendRequest(serverID, r, http.StatusOK, "endpoint=default")
 	}))
