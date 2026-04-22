@@ -1,1 +1,0 @@
-node3-1      | 2026/04/18 06:36:37 [lb-data] trace=chaos-20260418T120611-backend-drop node=node3 role=leader leader=node3 method=GET path=/chat algo=LeastRequests pool_source=sticky_subset pool=backend-1,backend-2 session_key=/chat:user:session-chaos-20260418T120611-backend-drop chosen_backend=backend-1 upstream=http://backend-1:8080 latency_ms=0

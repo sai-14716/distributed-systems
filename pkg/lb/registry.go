@@ -21,7 +21,7 @@ type BackendStats struct {
 	// These fields are read concurrently by the dataplane selection algorithms.
 	healthy    uint32 // 0/1
 	weightBits uint64 // float64 bits
-	cpuBucket  int32  // 0..10 (10% buckets)
+	cpuBucket  int32  // 0..20 (5% buckets)
 }
 
 func (s *BackendStats) SetHealthy(v bool) {
@@ -75,20 +75,16 @@ type StickyRule struct {
 // ---------- Registry (Shared Memory) ----------
 
 // Registry is the shared memory between the Controller and Forwarder.
-// ClientBackendMap provides session stickiness for WRR and LR.
-// NOTE: Cross-LB replication of ClientBackendMap is owned by Raft/Controller team.
 type Registry struct {
-	Backends         []*Backend
-	Epoch            uint64
-	StickyRules      []StickyRule
-	ClientBackendMap map[string]string // session_key → backend ID
-	mu               sync.RWMutex
+	Backends    []*Backend
+	Epoch       uint64
+	StickyRules []StickyRule
+	mu          sync.RWMutex
 }
 
 func NewRegistry() *Registry {
 	return &Registry{
-		Backends:         make([]*Backend, 0),
-		ClientBackendMap: make(map[string]string),
+		Backends: make([]*Backend, 0),
 		StickyRules: []StickyRule{
 			// Example: /chat requests from any role go to backend-1 or backend-2
 			{PathPrefix: "/chat", Role: "", Subset: []string{"backend-1", "backend-2"}},
@@ -160,31 +156,6 @@ func (r *Registry) MatchSubset(path, role string) []*Backend {
 		}
 	}
 	return nil
-}
-
-// StickyGet returns the previously mapped backend for a session key (WRR/LR).
-func (r *Registry) StickyGet(key string) *Backend {
-	r.mu.RLock()
-	id, ok := r.ClientBackendMap[key]
-	r.mu.RUnlock()
-	if !ok {
-		return nil
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	for _, b := range r.Backends {
-		if b.ID == id && b.Stats.IsHealthy() {
-			return b
-		}
-	}
-	return nil // was sticky but backend is now unhealthy — caller should remap
-}
-
-// StickySet records the session → backend mapping.
-func (r *Registry) StickySet(key, backendID string) {
-	r.mu.Lock()
-	r.ClientBackendMap[key] = backendID
-	r.mu.Unlock()
 }
 
 func (r *Registry) GetEpoch() uint64 {

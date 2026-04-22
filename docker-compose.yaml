@@ -137,6 +137,7 @@ services:
       dockerfile: Dockerfile
     ports:
       - "6699:6699/udp"
+      - "6701:6701"
     networks:
       sdnet:
         ipv4_address: 10.10.0.200

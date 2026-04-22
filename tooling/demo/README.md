@@ -27,3 +27,23 @@ Common flows:
   - `bash tooling/demo/loadtest.sh /app/k6/test_realistic_load.js`
   - `bash tooling/demo/loadtest.sh /app/k6/test_health_failover.js`
 
+- Show LB routing decision headers (pool, candidates, chosen backend):
+  - `bash tooling/demo/show_routing_headers.sh http://127.0.0.1:8001/chat 3`
+
+- Demonstrate least-requests with in-flight avoidance:
+  - `bash tooling/demo/least_requests_demo.sh http://127.0.0.1:8001`
+
+- Compare WRR vs least-load under an induced hot backend:
+  - `bash tooling/demo/load_weight_demo.sh wrr http://127.0.0.1:8001 50`
+  - `bash tooling/demo/load_weight_demo.sh least-load http://127.0.0.1:8001 50`
+
+- Watch health probing and propagation activity across all LB nodes:
+  - `bash tooling/demo/watch_health_propagation.sh 20`
+
+- Watch discovery DNS state (nodes, health, last probe, last error):
+  - `bash tooling/demo/watch_discovery_state.sh 20`
+  - `bash tooling/demo/watch_discovery_state.sh 30 http://127.0.0.1:6701/debug/state`
+
+- Run all algorithm visibility demos in one shot:
+  - `bash tooling/demo/run_all_algos_demo.sh http://127.0.0.1:8001 30`
+

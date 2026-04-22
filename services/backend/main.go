@@ -44,7 +44,7 @@ func main() {
 
 	workDefaultMs := getenvInt("WORK_MS", 50)
 	maxInflight := getenvInt("MAX_INFLIGHT", 100)
-	cpuSampleMs := getenvInt("CPU_SAMPLE_MS", 500)
+	cpuSampleMs := getenvInt("CPU_SAMPLE_MS", 250)
 	cpuAlpha := getenvFloat("CPU_EWMA_ALPHA", 0.2)
 
 	sampler := newCPUSampler(time.Duration(cpuSampleMs)*time.Millisecond, cpuAlpha)
@@ -66,7 +66,7 @@ func main() {
 	http.HandleFunc("/internal/load", func(w http.ResponseWriter, r *http.Request) {
 		ensureTraceID(r, w)
 		cpuPct := sampler.CPUPct()
-		bucket := cpuBucket10(cpuPct)
+		bucket := cpuBucket5(cpuPct)
 		w.Header().Set("X-Server-ID", serverID)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -76,7 +76,7 @@ func main() {
 			"cpu_bucket":      bucket,
 			"active_requests": atomic.LoadInt32(&activeRequests),
 		})
-		logBackendRequest(serverID, r, http.StatusOK, fmt.Sprintf("endpoint=internal/load cpu_pct=%.1f bucket=%d", cpuPct, bucket))
+		logBackendRequest(serverID, r, http.StatusOK, fmt.Sprintf("endpoint=internal/load cpu_pct=%.1f bucket=%d step=5%%", cpuPct, bucket))
 	})
 
 	// /chat - GPT-style chat endpoint

@@ -83,19 +83,19 @@ func processCPUSeconds() float64 {
 	return ut + st
 }
 
-func cpuBucket10(cpuPct float64) int {
+func cpuBucket5(cpuPct float64) int {
 	if cpuPct < 0 {
 		cpuPct = 0
 	}
 	if cpuPct > 100 {
 		cpuPct = 100
 	}
-	b := int(cpuPct) / 10
+	b := int(cpuPct) / 5
 	if b < 0 {
 		return 0
 	}
-	if b > 10 {
-		return 10
+	if b > 20 {
+		return 20
 	}
 	return b
 }

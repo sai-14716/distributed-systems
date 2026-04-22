@@ -14,16 +14,18 @@ node="${2:-}"
 [[ "$action" == "isolate" || "$action" == "restore" ]] || usage
 [[ -n "$node" ]] || usage
 
-declare -A ips=(
-  [node1]=10.10.0.11
-  [node2]=10.10.0.12
-  [node3]=10.10.0.13
-  [node4]=10.10.0.14
-  [node5]=10.10.0.15
-)
+node_ip() {
+  case "$1" in
+    node1) echo "10.10.0.11" ;;
+    node2) echo "10.10.0.12" ;;
+    node3) echo "10.10.0.13" ;;
+    node4) echo "10.10.0.14" ;;
+    node5) echo "10.10.0.15" ;;
+    *) return 1 ;;
+  esac
+}
 
-ip="${ips[$node]:-}"
-if [[ -z "$ip" ]]; then
+if ! ip="$(node_ip "$node")"; then
   usage
 fi
 

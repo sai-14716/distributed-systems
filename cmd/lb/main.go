@@ -82,6 +82,9 @@ func buildAlgorithm(name string) lb.Algorithm {
 	case "least-req", "least_requests", "leastrequests":
 		log.Println("Using LeastRequests algorithm")
 		return &lb.LeastRequests{}
+	case "least_req":
+		log.Println("Using LeastRequests algorithm")
+		return &lb.LeastRequests{}
 	case "least-load", "leastload", "cpu":
 		log.Println("Using LeastLoad algorithm")
 		return &lb.LeastLoad{}

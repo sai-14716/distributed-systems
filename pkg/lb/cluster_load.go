@@ -33,7 +33,7 @@ type LoadUpdate struct {
 	Epoch          uint64     `json:"epoch"`
 	Seq            uint64     `json:"seq"`
 	Status         LoadStatus `json:"status"`
-	CPUBucket10    int        `json:"cpu_bucket"` // 0..10
+	CPUBucket10    int        `json:"cpu_bucket"` // 0..20 (5% buckets)
 	ActiveRequests int32      `json:"active_requests"`
 }
 
@@ -161,6 +161,10 @@ type backendState struct {
 	lastActive int32
 	lastStatus LoadStatus
 
+	lastProbe  time.Time
+	probeTotal uint64
+	probeFail  uint64
+
 	// Last published values for change detection (bucket/status is the "significant" part).
 	pubBucket int
 	pubActive int32
@@ -271,6 +275,9 @@ func (c *ClusterLoad) initOwnership() {
 			lastBucket:    0,
 			lastActive:    0,
 			lastStatus:    LoadUp,
+			lastProbe:     time.Time{},
+			probeTotal:    0,
+			probeFail:     0,
 			pubBucket:     -1,
 			pubActive:     0,
 			pubStatus:     "",
@@ -354,6 +361,23 @@ func (c *ClusterLoad) Snapshot() LoadViewSnapshot {
 			"local_role": role,
 			"peer_alive": map[string]bool{primary: c.isPeerAliveLocked(primary, now), secondary: c.isPeerAliveLocked(secondary, now)},
 		}
+		if st, ok := c.state[id]; ok && st != nil {
+			entry["local_probe"] = map[string]any{
+				"at":          st.lastProbe,
+				"total":       st.probeTotal,
+				"fail":        st.probeFail,
+				"last_bucket": st.lastBucket,
+				"last_status": st.lastStatus,
+			}
+			entry["local_publish"] = map[string]any{
+				"epoch": st.epoch,
+				"seq":   st.seq,
+				"at":    st.lastPublished,
+			}
+		} else {
+			entry["local_probe"] = nil
+			entry["local_publish"] = nil
+		}
 		if v != nil {
 			entry["view"] = map[string]any{
 				"owner_id": v.ownerID,
@@ -420,8 +444,8 @@ func (c *ClusterLoad) HandleGossip(w http.ResponseWriter, r *http.Request) {
 		if u.CPUBucket10 < 0 {
 			u.CPUBucket10 = 0
 		}
-		if u.CPUBucket10 > 10 {
-			u.CPUBucket10 = 10
+		if u.CPUBucket10 > 20 {
+			u.CPUBucket10 = 20
 		}
 
 		cur := c.view[u.BackendID]
@@ -589,17 +613,17 @@ func (c *ClusterLoad) probeOnce(backendID string) {
 	}
 	resp, err := c.httpProbe.Do(req)
 	if err != nil {
-		c.recordProbe(backendID, 10, 0, LoadDown)
+		c.recordProbe(backendID, 20, 0, LoadDown, false)
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		c.recordProbe(backendID, 10, 0, LoadDown)
+		c.recordProbe(backendID, 20, 0, LoadDown, false)
 		return
 	}
 	var lr backendLoadResp
 	if err := json.NewDecoder(resp.Body).Decode(&lr); err != nil {
-		c.recordProbe(backendID, 10, 0, LoadDown)
+		c.recordProbe(backendID, 20, 0, LoadDown, false)
 		return
 	}
 
@@ -614,10 +638,10 @@ func (c *ClusterLoad) probeOnce(backendID string) {
 	if !lr.OK {
 		status = LoadDown
 	}
-	c.recordProbe(backendID, bucket, lr.ActiveRequests, status)
+	c.recordProbe(backendID, bucket, lr.ActiveRequests, status, true)
 }
 
-func (c *ClusterLoad) recordProbe(backendID string, bucket int, active int32, status LoadStatus) {
+func (c *ClusterLoad) recordProbe(backendID string, bucket int, active int32, status LoadStatus, probeOK bool) {
 	now := time.Now()
 
 	c.mu.Lock()
@@ -626,6 +650,12 @@ func (c *ClusterLoad) recordProbe(backendID string, bucket int, active int32, st
 	st := c.state[backendID]
 	if st == nil {
 		return
+	}
+
+	st.lastProbe = now
+	st.probeTotal++
+	if !probeOK {
+		st.probeFail++
 	}
 
 	changed := bucket != st.lastBucket || status != st.lastStatus
