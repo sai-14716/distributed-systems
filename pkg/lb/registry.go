@@ -18,8 +18,39 @@ import (
 type BackendStats struct {
 	ActiveRequests int32
 	TotalRequests  int64
-	IsHealthy      bool
-	Weight         float64
+
+	// These fields are read concurrently by the dataplane selection algorithms.
+	healthy    uint32 // 0/1
+	weightBits uint64 // float64 bits
+	cpuBucket  int32  // 0..20 (5% buckets)
+}
+
+func (s *BackendStats) SetHealthy(v bool) {
+	if v {
+		atomic.StoreUint32(&s.healthy, 1)
+	} else {
+		atomic.StoreUint32(&s.healthy, 0)
+	}
+}
+
+func (s *BackendStats) IsHealthy() bool {
+	return atomic.LoadUint32(&s.healthy) == 1
+}
+
+func (s *BackendStats) SetWeight(w float64) {
+	atomic.StoreUint64(&s.weightBits, math.Float64bits(w))
+}
+
+func (s *BackendStats) Weight() float64 {
+	return math.Float64frombits(atomic.LoadUint64(&s.weightBits))
+}
+
+func (s *BackendStats) SetCPUBucket(b int) {
+	atomic.StoreInt32(&s.cpuBucket, int32(b))
+}
+
+func (s *BackendStats) CPUBucket() int {
+	return int(atomic.LoadInt32(&s.cpuBucket))
 }
 
 // ---------- Backend ----------
@@ -45,20 +76,16 @@ type StickyRule struct {
 // ---------- Registry (Shared Memory) ----------
 
 // Registry is the shared memory between the Controller and Forwarder.
-// ClientBackendMap provides session stickiness for WRR and LR.
-// NOTE: Cross-LB replication of ClientBackendMap is owned by Raft/Controller team.
 type Registry struct {
-	Backends         []*Backend
-	Epoch            uint64
-	StickyRules      []StickyRule
-	ClientBackendMap map[string]string // session_key → backend ID
-	mu               sync.RWMutex
+	Backends    []*Backend
+	Epoch       uint64
+	StickyRules []StickyRule
+	mu          sync.RWMutex
 }
 
 func NewRegistry() *Registry {
 	return &Registry{
-		Backends:         make([]*Backend, 0),
-		ClientBackendMap: make(map[string]string),
+		Backends: make([]*Backend, 0),
 		StickyRules: []StickyRule{
 			// Example: /chat requests from any role go to backend-1 or backend-2
 			{PathPrefix: "/chat", Role: "", Subset: []string{"backend-1", "backend-2"}},
@@ -84,11 +111,14 @@ func (r *Registry) AddBackend(id string, u *url.URL) {
 		return nil
 	}
 	b := &Backend{
-		ID:  id,
-		URL: u,
+		ID:    id,
+		URL:   u,
 		Proxy: proxy,
-		Stats: BackendStats{IsHealthy: true, Weight: 1.0},
+		Stats: BackendStats{},
 	}
+	b.Stats.SetHealthy(true)
+	b.Stats.SetWeight(1.0)
+	b.Stats.SetCPUBucket(0)
 	r.Backends = append(r.Backends, b)
 	atomic.AddUint64(&r.Epoch, 1)
 }
@@ -98,7 +128,7 @@ func (r *Registry) GetHealthyBackends() []*Backend {
 	defer r.mu.RUnlock()
 	var out []*Backend
 	for _, b := range r.Backends {
-		if b.Stats.IsHealthy {
+		if b.Stats.IsHealthy() {
 			out = append(out, b)
 		}
 	}
@@ -116,7 +146,7 @@ func (r *Registry) MatchSubset(path, role string) []*Backend {
 		if pathMatch && roleMatch {
 			var subset []*Backend
 			for _, b := range r.Backends {
-				if b.Stats.IsHealthy {
+				if b.Stats.IsHealthy() {
 					for _, id := range rule.Subset {
 						if b.ID == id {
 							subset = append(subset, b)
@@ -133,31 +163,6 @@ func (r *Registry) MatchSubset(path, role string) []*Backend {
 	return nil
 }
 
-// StickyGet returns the previously mapped backend for a session key (WRR/LR).
-func (r *Registry) StickyGet(key string) *Backend {
-	r.mu.RLock()
-	id, ok := r.ClientBackendMap[key]
-	r.mu.RUnlock()
-	if !ok {
-		return nil
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	for _, b := range r.Backends {
-		if b.ID == id && b.Stats.IsHealthy {
-			return b
-		}
-	}
-	return nil // was sticky but backend is now unhealthy — caller should remap
-}
-
-// StickySet records the session → backend mapping.
-func (r *Registry) StickySet(key, backendID string) {
-	r.mu.Lock()
-	r.ClientBackendMap[key] = backendID
-	r.mu.Unlock()
-}
-
 func (r *Registry) GetEpoch() uint64 {
 	return atomic.LoadUint64(&r.Epoch)
 }
@@ -169,7 +174,7 @@ func (r *Registry) SimulateBackendFailure(id string, healthy bool) {
 	defer r.mu.Unlock()
 	for _, b := range r.Backends {
 		if b.ID == id {
-			b.Stats.IsHealthy = healthy
+			b.Stats.SetHealthy(healthy)
 			log.Printf("[Controller] Backend %s IsHealthy set to %v", id, healthy)
 		}
 	}
@@ -181,17 +186,16 @@ func (r *Registry) SimulateBackendFailure(id string, healthy bool) {
 func (r *Registry) StartController() {
 	go func() {
 		client := &http.Client{Timeout: 500 * time.Millisecond}
-		for {
-			time.Sleep(1 * time.Second)
-			
-			r.mu.RLock()
-			var backends []*Backend
-			backends = append(backends, r.Backends...)
-			r.mu.RUnlock()
+		t := time.NewTicker(1 * time.Second)
+		defer t.Stop()
+
+		for range t.C {
+			backends := r.GetBackends()
 
 			for _, b := range backends {
 				var active, total int64
 				healthy := false
+
 				resp, err := client.Get(b.URL.String() + "/health")
 				if err == nil {
 					if resp.StatusCode == 200 {
@@ -206,24 +210,39 @@ func (r *Registry) StartController() {
 							total = res.TotalRequests
 						}
 					}
-					resp.Body.Close()
+					_ = resp.Body.Close()
 				}
 
-				r.mu.Lock()
-				b.Stats.IsHealthy = healthy
+				b.Stats.SetHealthy(healthy)
 				if healthy {
 					atomic.StoreInt32(&b.Stats.ActiveRequests, int32(active))
 					atomic.StoreInt64(&b.Stats.TotalRequests, total)
 				}
-				b.Stats.Weight = math.Abs(rand.NormFloat64())
+
+				// Random weight for the baseline (non-gossip) controller mode.
+				w := math.Abs(rand.NormFloat64())
+				if w < 0.1 {
+					w = 0.1
+				}
+				b.Stats.SetWeight(w)
+
 				log.Printf("[Controller] -> %s Healthy: %v, ActiveReqs: %d, TotalReqs: %d, Weight: %.2f",
-					b.ID, b.Stats.IsHealthy,
+					b.ID, b.Stats.IsHealthy(),
 					atomic.LoadInt32(&b.Stats.ActiveRequests),
 					atomic.LoadInt64(&b.Stats.TotalRequests),
-					b.Stats.Weight)
-				r.mu.Unlock()
+					b.Stats.Weight(),
+				)
 			}
+
 			atomic.AddUint64(&r.Epoch, 1)
 		}
 	}()
+}
+
+func (r *Registry) GetBackends() []*Backend {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]*Backend, 0, len(r.Backends))
+	out = append(out, r.Backends...)
+	return out
 }

@@ -1,7 +1,9 @@
 services:
   # 3 Symmetric Backends
   backend-1:
-    build: ./services/backend
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
     environment:
       - SERVER_ID=B1
     ports:
@@ -9,7 +11,9 @@ services:
     networks:
       - sdnet
   backend-2:
-    build: ./services/backend
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
     environment:
       - SERVER_ID=B2
     ports:
@@ -17,7 +21,9 @@ services:
     networks:
       - sdnet
   backend-3:
-    build: ./services/backend
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
     environment:
       - SERVER_ID=B3
     ports:
@@ -25,7 +31,9 @@ services:
     networks:
       - sdnet
   backend-4:
-    build: ./services/backend
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
     environment:
       - SERVER_ID=B4
     ports:
@@ -33,7 +41,9 @@ services:
     networks:
       - sdnet
   backend-5:
-    build: ./services/backend
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
     environment:
       - SERVER_ID=B5
     ports:
@@ -41,7 +51,9 @@ services:
     networks:
       - sdnet 
   backend-6:
-    build: ./services/backend
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
     environment:
       - SERVER_ID=B6
     ports:
@@ -49,7 +61,9 @@ services:
     networks:
       - sdnet
   backend-7:
-    build: ./services/backend
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
     environment:
       - SERVER_ID=B7
     ports:
@@ -57,7 +71,9 @@ services:
     networks:
       - sdnet
   backend-8:
-    build: ./services/backend
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
     environment:
       - SERVER_ID=B8
     ports:
@@ -65,7 +81,9 @@ services:
     networks:
       - sdnet
   backend-9:
-    build: ./services/backend
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
     environment:
       - SERVER_ID=B9
     ports:
@@ -73,7 +91,9 @@ services:
     networks:
       - sdnet
   backend-10:
-    build: ./services/backend
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
     environment:
       - SERVER_ID=B10
     ports:
