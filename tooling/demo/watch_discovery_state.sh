@@ -4,19 +4,20 @@ set -euo pipefail
 # Poll the discovery debug endpoint and print per-node health/probe state.
 #
 # Usage:
-#   bash tooling/demo/watch_discovery_state.sh [seconds] [url]
+#   bash tooling/demo/watch_discovery_state.sh [seconds]
 #
-# Examples:
-#   bash tooling/demo/watch_discovery_state.sh 20
-#   bash tooling/demo/watch_discovery_state.sh 30 http://127.0.0.1:6701/debug/state
+# Uses discovery URL from cluster_config.yaml
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-SECS="${1:-20}"
-STATE_URL="${2:-http://127.0.0.1:6701/debug/state}"
+# Load cluster config and helper functions
+source tooling/helper/cluster_config.sh
 
-python3 - <<'PY' "$SECS" "$STATE_URL"
+SECS="${1:-20}"
+DISCOVERY_URL="$(get_discovery_url http)/debug/state"
+
+python3 - <<'PY' "$SECS" "$DISCOVERY_URL"
 import json
 import sys
 import time

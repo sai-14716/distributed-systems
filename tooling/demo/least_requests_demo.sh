@@ -4,7 +4,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-LB_URL="${1:-http://127.0.0.1:8001}"
+# Load cluster config and helper functions
+source tooling/helper/cluster_config.sh
+
+# Use first LB (node1) by default, or override with argument
+LB_NODE="${1:-node1}"
+LB_URL="$(get_lb_url "$LB_NODE")"
 
 docker compose --profile tools run --rm admin -algorithm least-req -timeout 30s >/dev/null
 

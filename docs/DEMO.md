@@ -28,9 +28,16 @@ Observability checks (from host):
 
 ```bash
 bash tooling/demo/state.sh
-curl -s http://127.0.0.1:8001/admin/status
-curl -s http://127.0.0.1:8001/admin/load-view
-curl -s http://127.0.0.1:8081/health
+
+# Get LB status (uses node1)
+source tooling/helper/cluster_config.sh
+LB_URL=$(get_lb_url "node1" "/admin/status")
+curl -s "$LB_URL"
+curl -s "${LB_URL%/*}/load-view"
+
+# Check backend health (backend-1)
+BACKEND_URL=$(get_backend_url "backend-1" "/health")
+curl -s "$BACKEND_URL"
 ```
 
 If you want a live “leader election monitor”, run this in a second terminal:
@@ -41,22 +48,39 @@ bash tooling/demo/watch_state.sh
 
 ## 2) Show config changes replicated via Raft
 
-Switch LB algorithm (write goes through Raft and is applied on every node’s dataplane):
+Switch LB algorithm (write goes through Raft and is applied on every node's dataplane).
+
+**Note**: The admin tool runs locally in docker, so use the helper script to manage algorithms:
 
 ```bash
-docker compose --profile tools run --rm admin -algorithm wrr
-docker compose --profile tools run --rm admin -algorithm least-req
+bash tooling/demo/routing_behaviour.sh wrr
+bash tooling/demo/routing_behaviour.sh least-req
 ```
 
 Curl equivalent from host (detect leader first, then submit):
 
 ```bash
-LEADER_PORT=$(for p in 19091 19092 19093 19094 19095; do
-  role=$(curl -sf "http://127.0.0.1:${p}/state" | jq -r '.role // empty') || continue
-  if [ "$role" = "leader" ]; then echo "$p"; break; fi
-done)
+source tooling/helper/cluster_config.sh
 
-curl -sS -X POST "http://127.0.0.1:${LEADER_PORT}/admin/submit" \
+# Find the current leader
+LEADER_NODE=""
+for node_name in $(get_all_nodes); do
+  url=$(get_node_url "$node_name" "/state")
+  role=$(curl -s "$url" 2>/dev/null | jq -r '.role // empty')
+  if [ "$role" = "leader" ]; then
+    LEADER_NODE="$node_name"
+    break
+  fi
+done
+
+if [ -z "$LEADER_NODE" ]; then
+  echo "No leader found"
+  exit 1
+fi
+
+LEADER_URL=$(get_node_url "$LEADER_NODE" "/admin/submit")
+
+curl -sS -X POST "$LEADER_URL" \
   -H 'Content-Type: application/json' \
   -d '{"type":"set_config","data":{"algorithm":"wrr","probe_interval_ms":1000}}'
 ```
@@ -64,7 +88,9 @@ curl -sS -X POST "http://127.0.0.1:${LEADER_PORT}/admin/submit" \
 Verify the dataplane is using the new config:
 
 ```bash
-curl -s http://127.0.0.1:8001/admin/status
+source tooling/helper/cluster_config.sh
+LB_URL=$(get_lb_url "node1" "/admin/status")
+curl -s "$LB_URL" | jq '.config'
 ```
 
 That status payload includes the Raft config and the current load snapshot, so you can see backend ownership, probe activity, and the global probe interval in one response.
@@ -72,8 +98,8 @@ That status payload includes the Raft config and the current load snapshot, so y
 Show routing behavior changed (simplest visual check):
 
 ```bash
-bash tooling/demo/routing_behaviour.sh round_robin
-bash tooling/demo/routing_behaviour.sh maglev
+bash tooling/demo/routing_behaviour.sh round_robin node1
+bash tooling/demo/routing_behaviour.sh maglev node1
 ```
 
 If both runs show the same backend, try a different key (for example `demo-fixed-2`), since hashing can map some keys to the same backend under both algorithms.
@@ -83,7 +109,7 @@ If both runs show the same backend, try a different key (for example `demo-fixed
 Show LB decision headers for real requests:
 
 ```bash
-bash tooling/demo/show_routing_headers.sh http://127.0.0.1:8001/chat 3
+bash tooling/demo/show_routing_headers.sh node1 /chat 3
 ```
 
 This prints:
@@ -96,26 +122,26 @@ Demonstrate that algorithms behave differently under controlled conditions:
 
 ```bash
 # Least-Requests: short request should avoid the backend with more active requests
-bash tooling/demo/least_requests_demo.sh http://127.0.0.1:8001
+bash tooling/demo/least_requests_demo.sh node1
 
-# Dynamic backend load: rotates hot load across all 10 backends (8081..8090 by default)
+# Dynamic backend load: rotates hot load across all backends from cluster config
 bash tooling/demo/dynamic_backend_load.sh 90 3 1800 8
 
 # One-command demos: run dynamic load in background while printing per-request picks
-bash tooling/demo/least_requests_with_dynamic_load.sh http://127.0.0.1:8001 20
-bash tooling/demo/wrr_with_dynamic_load.sh http://127.0.0.1:8001 20
+bash tooling/demo/least_requests_with_dynamic_load.sh node1 20
+bash tooling/demo/wrr_with_dynamic_load.sh node1 20
 ```
 
 With dynamic load running, send individual requests and inspect headers to observe algorithm behavior live:
 
 ```bash
-bash tooling/demo/show_routing_headers.sh http://127.0.0.1:8001/ 5
+bash tooling/demo/show_routing_headers.sh node1 / 5
 ```
 
 Single-command version (runs all algorithm visibility demos):
 
 ```bash
-bash tooling/demo/run_all_algos_demo.sh http://127.0.0.1:8001 30
+bash tooling/demo/run_all_algos_demo.sh node1 30
 ```
 
 ## 2.2) Show backend-to-LB assignment changes (ring ownership)

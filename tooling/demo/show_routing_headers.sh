@@ -4,13 +4,24 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-URL="${1:-http://127.0.0.1:8001/chat}"
-N="${2:-5}"
+# Load cluster config and helper functions
+source tooling/helper/cluster_config.sh
 
-echo "url=$URL n=$N"
+# Use first LB (node1) by default, or override with argument
+LB_NODE="${1:-node1}"
+ENDPOINT="${2:-/chat}"
+N="${3:-5}"
+
+# Resolve the LB URL from config
+LB_URL=$(get_lb_url "$LB_NODE" "$ENDPOINT")
+
+echo "Testing LB routing headers against: $LB_URL"
+echo "Requests: $N"
+echo
+
 for i in $(seq 1 "$N"); do
   echo "--- request $i ---"
-  curl -s -D - -o /dev/null "$URL" \
+  curl -s -D - -o /dev/null "$LB_URL" \
     -H "X-Session-ID: demo-$i" \
     -H "X-Work-Ms: 50" \
     | awk -F': ' '

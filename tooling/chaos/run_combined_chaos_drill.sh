@@ -4,8 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+# Load cluster config and helper functions
+source tooling/helper/cluster_config.sh
+
 DRILL_ID="${1:-chaos-$(date +%Y%m%dT%H%M%S)}"
-TARGETS="${TARGETS:-http://node1:19090,http://node2:19090,http://node3:19090,http://node4:19090,http://node5:19090}"
 CONFIG_ALGO_1="${CONFIG_ALGO_1:-wrr}"
 CONFIG_ALGO_2="${CONFIG_ALGO_2:-least-req}"
 STOP_BACKEND="${STOP_BACKEND:-backend-2}"
@@ -39,11 +41,11 @@ cleanup() {
 trap cleanup EXIT
 
 find_leader() {
-  local nodes=(node1 node2 node3 node4 node5)
+  local nodes=(node1 node2)
   local state
   for _ in {1..30}; do
     for n in "${nodes[@]}"; do
-      state="$(docker compose exec -T "$n" sh -lc "wget -qO- http://127.0.0.1:19090/state" 2>/dev/null || true)"
+      state="$(docker compose exec -T "$n" sh -lc "curl -s http://127.0.0.1:19090/state" 2>/dev/null || true)"
       if [[ "$state" == *'"role":"leader"'* ]]; then
         printf '%s' "$n"
         return 0
@@ -54,8 +56,8 @@ find_leader() {
   return 1
 }
 
-log "bringing up cluster"
-docker compose up -d --build discovery backend-1 backend-2 backend-3 backend-4 backend-5 backend-6 backend-7 backend-8 backend-9 backend-10 node1 node2 node3 node4 node5 \
+log "bringing up Laptop A cluster"
+docker compose up -d --build discovery backend-1 backend-2 backend-3 node1 node2 \
   >"$DRILL_DIR/cluster_up.log" 2>&1
 
 LEADER_BEFORE="$(find_leader || true)"

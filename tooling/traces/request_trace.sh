@@ -45,7 +45,7 @@ else
 fi
 
 docker compose logs --since "$SINCE_WINDOW" \
-  discovery node1 node2 node3 node4 node5 backend-1 backend-2 backend-3 backend-4 backend-5 backend-6 backend-7 backend-8 backend-9 backend-10 2>&1 \
+  discovery node1 node2 backend-1 backend-2 backend-3 2>&1 \
   | grep "$TRACE_ID" > "$TMP_TRACE_LINES" || true
 
 grep -E '\[client-proxy\]' "$TMP_TRACE_LINES" > "$CLIENT_PROXY_FILE" || true

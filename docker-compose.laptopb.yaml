@@ -1,0 +1,109 @@
+# Docker Compose Configuration Template for Laptop B
+# This file shows how to configure Laptop B to run node3, node4, and backends 4-7
+#
+# Usage:
+#   LAPTOP_A_IP=192.168.1.100 \
+#   LAPTOP_B_IP=192.168.1.101 \
+#   LAPTOP_C_IP=192.168.1.102 \
+#   docker compose -f docker-compose.laptopb.yaml up -d
+#
+# NOTE: Update the IP addresses in cluster_config.yaml first!
+
+services:
+  # Laptop B: Backends 4-7
+  backend-4:
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
+    environment:
+      - SERVER_ID=B4
+    ports:
+      - "8084:8080"
+    networks:
+      - sdnet
+
+  backend-5:
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
+    environment:
+      - SERVER_ID=B5
+    ports:
+      - "8085:8080"
+    networks:
+      - sdnet
+
+  backend-6:
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
+    environment:
+      - SERVER_ID=B6
+    ports:
+      - "8086:8080"
+    networks:
+      - sdnet
+
+  backend-7:
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
+    environment:
+      - SERVER_ID=B7
+    ports:
+      - "8087:8080"
+    networks:
+      - sdnet
+
+  # Laptop B: Control Plane Node 3
+  # Uses real IPs for peer discovery and self-identification
+  node3:
+    build:
+      context: .
+      dockerfile: cmd/node/Dockerfile
+    environment:
+      NODE_ID: node3
+      HTTP_ADDR: :19090
+      SELF_URL: http://${LAPTOP_B_IP}:19093
+      STATE_FILE: /var/lib/raft/state.json
+      PEERS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_C_IP}:19094,http://${LAPTOP_C_IP}:19095
+      LB_ADDR: :8000
+      LB_CONTROL_ADDR: 127.0.0.1:18080
+      DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
+    volumes:
+      - node3_data:/var/lib/raft
+    ports:
+      - "8003:8000"
+      - "19093:19090"
+    networks:
+      - sdnet
+
+  # Laptop B: Control Plane Node 4
+  node4:
+    build:
+      context: .
+      dockerfile: cmd/node/Dockerfile
+    environment:
+      NODE_ID: node4
+      HTTP_ADDR: :19090
+      SELF_URL: http://${LAPTOP_B_IP}:19094
+      STATE_FILE: /var/lib/raft/state.json
+      PEERS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_C_IP}:19094,http://${LAPTOP_C_IP}:19095
+      LB_ADDR: :8000
+      LB_CONTROL_ADDR: 127.0.0.1:18080
+      DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
+    volumes:
+      - node4_data:/var/lib/raft
+    ports:
+      - "8004:8000"
+      - "19094:19090"
+    networks:
+      - sdnet
+
+volumes:
+  node3_data:
+  node4_data:
+
+networks:
+  sdnet:
+    driver: bridge

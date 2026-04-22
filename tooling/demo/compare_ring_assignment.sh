@@ -4,10 +4,15 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-LB_URL="${1:-http://127.0.0.1:8001}"
+# Load cluster config and helper functions
+source tooling/helper/cluster_config.sh
+
+LB_NODE="${1:-node1}"
 NODE_TO_TOGGLE="${2:-node5}"
 OUT_DIR="${3:-/tmp}"
 WAIT_SECS="${WAIT_SECS:-5}"
+
+LB_URL="$(get_lb_url "$LB_NODE")"
 
 mkdir -p "$OUT_DIR"
 

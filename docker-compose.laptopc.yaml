@@ -1,0 +1,75 @@
+# Docker Compose Configuration Template for Laptop C
+# This file shows how to configure Laptop C to run node5 and backends 8-10
+#
+# Usage:
+#   LAPTOP_A_IP=192.168.1.100 \
+#   LAPTOP_B_IP=192.168.1.101 \
+#   LAPTOP_C_IP=192.168.1.102 \
+#   docker compose -f docker-compose.laptopc.yaml up -d
+#
+# NOTE: Update the IP addresses in cluster_config.yaml first!
+
+services:
+  # Laptop C: Backends 8-10
+  backend-8:
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
+    environment:
+      - SERVER_ID=B8
+    ports:
+      - "8088:8080"
+    networks:
+      - sdnet
+
+  backend-9:
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
+    environment:
+      - SERVER_ID=B9
+    ports:
+      - "8089:8080"
+    networks:
+      - sdnet
+
+  backend-10:
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
+    environment:
+      - SERVER_ID=B10
+    ports:
+      - "8090:8080"
+    networks:
+      - sdnet
+
+  # Laptop C: Control Plane Node 5
+  # Uses real IPs for peer discovery and self-identification
+  node5:
+    build:
+      context: .
+      dockerfile: cmd/node/Dockerfile
+    environment:
+      NODE_ID: node5
+      HTTP_ADDR: :19090
+      SELF_URL: http://${LAPTOP_C_IP}:19095
+      STATE_FILE: /var/lib/raft/state.json
+      PEERS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_C_IP}:19094,http://${LAPTOP_C_IP}:19095
+      LB_ADDR: :8000
+      LB_CONTROL_ADDR: 127.0.0.1:18080
+      DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
+    volumes:
+      - node5_data:/var/lib/raft
+    ports:
+      - "8005:8000"
+      - "19095:19090"
+    networks:
+      - sdnet
+
+volumes:
+  node5_data:
+
+networks:
+  sdnet:
+    driver: bridge

@@ -4,11 +4,15 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+# Load cluster config and helper functions
+source tooling/helper/cluster_config.sh
+
 ALGO="${1:-wrr}"           # wrr | least-load
-LB_URL="${2:-http://127.0.0.1:8001}"
+LB_NODE="${2:-node1}"
 N="${3:-30}"
 HOT_WORK_MS="${4:-5000}"
 HOT_REQUESTS="${5:-8}"
+LB_URL="$(get_lb_url "$LB_NODE")"
 
 docker compose --profile tools run --rm admin -algorithm "$ALGO" -timeout 30s >/dev/null
 

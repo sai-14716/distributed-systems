@@ -4,25 +4,50 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+# Load cluster config and helper functions
+source tooling/helper/cluster_config.sh
+
 leader="$(
   python3 - <<'PY'
-import json, urllib.request
-ports = {"node1":19091,"node2":19092,"node3":19093,"node4":19094,"node5":19095}
-for n,p in ports.items():
+import sys
+sys.path.insert(0, "tooling/helper")
+from cluster_config import Config, fetch_json
+
+try:
+    cfg = Config.load()
+except Exception as e:
+    print(f"ERROR: Failed to load config: {e}", file=sys.stderr)
+    sys.exit(1)
+
+# Check nodes on this laptop (Laptop A) first
+for node_name in cfg.get_node_names():
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{p}/state", timeout=0.6) as r:
-            st = json.loads(r.read().decode("utf-8"))
-        if st.get("role") == "leader":
-            print(n)
-            raise SystemExit(0)
+        url = cfg.get_node_url(node_name, "/state")
+        st = fetch_json(url, timeout=0.6)
+        if st and st.get("role") == "leader":
+            print(node_name)
+            sys.exit(0)
     except Exception:
         continue
-raise SystemExit(1)
+
+# If no local leader, check other nodes
+# (This only works if running from a host that can reach all laptops)
+for node_name in cfg.get_node_names():
+    try:
+        url = cfg.get_node_url(node_name, "/state")
+        st = fetch_json(url, timeout=1.0)
+        if st and st.get("role") == "leader":
+            print(node_name)
+            sys.exit(0)
+    except Exception:
+        continue
+
+sys.exit(1)
 PY
 )" || true
 
 if [[ -z "${leader:-}" ]]; then
-  echo "Could not determine leader (is the cluster up?)." >&2
+  echo "Could not determine leader (is the cluster up? Check cluster_config.yaml)." >&2
   exit 1
 fi
 

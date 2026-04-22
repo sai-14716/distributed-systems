@@ -4,7 +4,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-LB_URL="${1:-http://127.0.0.1:8001}"
+# Load cluster config and helper functions
+source tooling/helper/cluster_config.sh
+
+LB_NODE="${1:-node1}"
+LB_URL="$(get_lb_url "$LB_NODE")"
 REQUESTS="${2:-15}"
 LOAD_SECS="${3:-60}"
 PHASE_SECS="${4:-0.5}"
@@ -34,6 +38,6 @@ trap cleanup EXIT INT TERM
 sleep 1
 
 echo "showing $REQUESTS routed requests while dynamic load is running"
-bash tooling/demo/show_routing_headers.sh "$LB_URL/" "$REQUESTS"
+bash tooling/demo/show_routing_headers.sh "$LB_NODE" "/" "$REQUESTS"
 
 echo "wrr + dynamic load demo done"

@@ -12,26 +12,33 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+# Load cluster config and helper functions
+source tooling/helper/cluster_config.sh
+
 SECS="${1:-15}"
 
 python3 - <<'PY' "$SECS"
 import json
 import sys
 import time
-import urllib.request
+
+# Add tooling to path for import
+sys.path.insert(0, "tooling/helper")
+from cluster_config import Config, fetch_json
 
 secs = int(sys.argv[1])
-lbs = [
-    ("node1", "http://127.0.0.1:8001/admin/load-view"),
-    ("node2", "http://127.0.0.1:8002/admin/load-view"),
-    ("node3", "http://127.0.0.1:8003/admin/load-view"),
-    ("node4", "http://127.0.0.1:8004/admin/load-view"),
-    ("node5", "http://127.0.0.1:8005/admin/load-view"),
-]
 
-def fetch(url):
-    with urllib.request.urlopen(url, timeout=1.5) as r:
-        return json.loads(r.read().decode("utf-8"))
+try:
+    cfg = Config.load()
+except Exception as e:
+    print(f"ERROR: Failed to load config: {e}", file=sys.stderr)
+    sys.exit(1)
+
+# Build list of (node_name, lb_url) pairs
+lbs = []
+for node_name in cfg.get_node_names():
+    lb_url = cfg.get_lb_url(node_name, "/admin/load-view")
+    lbs.append((node_name, lb_url))
 
 def fmt_int(v):
     try:
@@ -79,13 +86,15 @@ while time.time() < end:
 
     for name, url in lbs:
         try:
-            snapshots[name] = fetch(url)
+            snapshots[name] = fetch_json(url, timeout=1.5)
+            if snapshots[name] is None:
+                snapshots[name] = {"error": "timeout"}
         except Exception as e:
             snapshots[name] = {"error": f"ERR {e.__class__.__name__}"}
 
     backend_ids = set()
     for snap in snapshots.values():
-        if "error" in snap:
+        if snap is None or "error" in snap:
             continue
         backend_ids.update((snap.get("backends") or {}).keys())
 
@@ -93,8 +102,8 @@ while time.time() < end:
     for bid in backend_ids:
         for n in nodes:
             snap = snapshots.get(n, {})
-            if "error" in snap:
-                rows[bid][n] = snap["error"]
+            if snap is None or "error" in snap:
+                rows[bid][n] = snap.get("error") if snap else "NA"
                 continue
             entry = (snap.get("backends") or {}).get(bid)
             rows[bid][n] = fmt_cell(entry)

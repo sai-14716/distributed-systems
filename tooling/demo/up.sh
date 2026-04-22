@@ -4,21 +4,57 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+# Load cluster config
+source tooling/helper/cluster_config.sh
+
 CLEAN="${1:-}"
 if [[ "$CLEAN" == "--clean" ]]; then
   docker compose down -v --remove-orphans
 fi
 
+echo "Starting Laptop A services..."
 docker compose up -d --build \
-  discovery backend-1 backend-2 backend-3 backend-4 backend-5 backend-6 backend-7 backend-8 backend-9 backend-10 \
-  node1 node2 node3 node4 node5
+  discovery backend-1 backend-2 backend-3 \
+  node1 node2
 
 echo
-echo "Cluster is up."
-echo "Control-plane (Raft) ports on host:"
-echo "  node1 http://127.0.0.1:19091/state"
-echo "  node2 http://127.0.0.1:19092/state"
-echo "  node3 http://127.0.0.1:19093/state"
-echo "  node4 http://127.0.0.1:19094/state"
-echo "  node5 http://127.0.0.1:19095/state"
+echo "Laptop A is now running."
+echo
+
+# Display endpoints using config
+python3 - <<'PY'
+import sys
+sys.path.insert(0, "tooling/helper")
+from cluster_config import Config
+
+cfg = Config.load()
+
+print("Control-plane (Raft) endpoints:")
+for node_name in ["node1", "node2"]:
+    url = cfg.get_node_url(node_name, "/state")
+    print(f"  {node_name}: {url}")
+
+print()
+print("Load Balancer endpoints:")
+for node_name in ["node1", "node2"]:
+    url = cfg.get_lb_url(node_name, "/chat")
+    print(f"  {node_name}: {url}")
+
+print()
+print("Backend endpoints (on Laptop A):")
+for backend_name in ["backend-1", "backend-2", "backend-3"]:
+    url = cfg.get_backend_url(backend_name)
+    print(f"  {backend_name}: {url}")
+
+print()
+print("Discovery service:")
+http_url = cfg.get_discovery_url("http")
+udp_addr = cfg.get_discovery_url("udp")
+print(f"  HTTP: {http_url}")
+print(f"  UDP: {udp_addr}")
+
+print()
+print("Note: To connect other laptops (B, C), update cluster_config.yaml with their IPs")
+print("and start services on those machines with their own docker-compose configurations.")
+PY
 
