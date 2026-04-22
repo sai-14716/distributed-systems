@@ -119,9 +119,9 @@ func main() {
 			cpuPct = cpuPercents[0]
 		}
 
-		content := fmt.Sprintf("<p><strong>Status:</strong> OK</p><p><strong>Server:</strong> %s</p><p><strong>Active Requests:</strong> %d</p><p><strong>Total Req:</strong> %d</p><p><strong>CPU:</strong> %.2f%%</p>",
-			serverID, atomic.LoadInt32(&backendActiveRequests), atomic.LoadInt64(&backendTotalRequests), cpuPct)
-		sendHTML(w, "Health Check", content)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"status": "OK", "active_requests": %d, "total_requests": %d, "cpu": %.2f}`, 
+			atomic.LoadInt32(&backendActiveRequests), atomic.LoadInt64(&backendTotalRequests), cpuPct)
 
 		logBackendRequest(serverID, r, http.StatusOK, "health=true heartbeat")
 	})

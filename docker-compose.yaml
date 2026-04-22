@@ -1,45 +1,86 @@
-version: '3.8'
-
 services:
   # 3 Symmetric Backends
   backend-1:
     build: ./services/backend
     environment:
       - SERVER_ID=B1
+    ports:
+      - "127.0.0.1:8081:8080"
+    networks:
+      - sdnet
   backend-2:
     build: ./services/backend
     environment:
       - SERVER_ID=B2
+    ports:
+      - "127.0.0.1:8082:8080"
+    networks:
+      - sdnet
   backend-3:
     build: ./services/backend
     environment:
       - SERVER_ID=B3
+    ports:
+      - "127.0.0.1:8083:8080"
+    networks:
+      - sdnet
+  backend-4:
+    build: ./services/backend
+    environment:
+      - SERVER_ID=B4
+    ports:
+      - "127.0.0.1:8084:8080"
+    networks:
+      - sdnet
+  backend-5:
+    build: ./services/backend
+    environment:
+      - SERVER_ID=B5
+    ports:
+      - "127.0.0.1:8085:8080"
+    networks:
+      - sdnet 
+  backend-6:
+    build: ./services/backend
+    environment:
+      - SERVER_ID=B6
+    ports:
+      - "127.0.0.1:8086:8080"
+    networks:
+      - sdnet
+  backend-7:
+    build: ./services/backend
+    environment:
+      - SERVER_ID=B7
+    ports:
+      - "127.0.0.1:8087:8080"
+    networks:
+      - sdnet
+  backend-8:
+    build: ./services/backend
+    environment:
+      - SERVER_ID=B8
+    ports:
+      - "127.0.0.1:8088:8080"
+    networks:
+      - sdnet
+  backend-9:
+    build: ./services/backend
+    environment:
+      - SERVER_ID=B9
+    ports:
+      - "127.0.0.1:8089:8080"
+    networks:
+      - sdnet
+  backend-10:
+    build: ./services/backend
+    environment:
+      - SERVER_ID=B10
+    ports:
+      - "127.0.0.1:8090:8080"
+    networks:
+      - sdnet
 
-  # 3 Load Balancers (for multi-LB sticky replication tests)
-  lb-1:
-    build:
-      context: .
-      dockerfile: cmd/lb/Dockerfile
-    ports:
-      - "8081:8080"
-    environment:
-      - ALGO=maglev
-  lb-2:
-    build:
-      context: .
-      dockerfile: cmd/lb/Dockerfile
-    ports:
-      - "8082:8080"
-    environment:
-      - ALGO=maglev
-  lb-3:
-    build:
-      context: .
-      dockerfile: cmd/lb/Dockerfile
-    ports:
-      - "8083:8080"
-    environment:
-      - ALGO=maglev
   node1:
     build:
       context: .
@@ -57,10 +98,9 @@ services:
       - node1_data:/var/lib/raft
     ports:
       - "8001:8000"
+      - "127.0.0.1:19091:19090"
     networks:
-      default: {}
-      sdnet:
-        ipv4_address: 10.10.0.11
+      - sdnet
   node2:
     build:
       context: .
@@ -78,10 +118,9 @@ services:
       - node2_data:/var/lib/raft
     ports:
       - "8002:8000"
+      - "127.0.0.1:19092:19090"
     networks:
-      default: {}
-      sdnet:
-        ipv4_address: 10.10.0.12
+      - sdnet
   node3:
     build:
       context: .
@@ -99,10 +138,9 @@ services:
       - node3_data:/var/lib/raft
     ports:
       - "8003:8000"
+      - "127.0.0.1:19093:19090"
     networks:
-      default: {}
-      sdnet:
-        ipv4_address: 10.10.0.13
+      - sdnet
   node4:
     build:
       context: .
@@ -118,12 +156,11 @@ services:
       DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
     volumes:
       - node4_data:/var/lib/raft
+    networks:
+      - sdnet
     ports:
       - "8004:8000"
-    networks:
-      default: {}
-      sdnet:
-        ipv4_address: 10.10.0.14
+      - "127.0.0.1:19094:19090"
   node5:
     build:
       context: .
@@ -141,10 +178,9 @@ services:
       - node5_data:/var/lib/raft
     ports:
       - "8005:8000"
+      - "127.0.0.1:19095:19090"
     networks:
-      default: {}
-      sdnet:
-        ipv4_address: 10.10.0.15
+      - sdnet
 
   discovery:
     build:
@@ -152,15 +188,15 @@ services:
       dockerfile: Dockerfile
     ports:
       - "6699:6699/udp"
+      - "6701:6701"
     networks:
-      sdnet:
-        ipv4_address: 10.10.0.2
+      - sdnet
 
   k6-client:
+    profiles: ["loadtest"]
     build:
       context: .
       dockerfile: clients/k6/Dockerfile
-    profiles: ["test"]
     environment:
       DISCOVERY_DNS_ADDR: discovery:6699
       DISCOVERY_CLIENT_LISTEN: 127.0.0.1:6700
@@ -175,10 +211,9 @@ services:
       - node4
       - node5
     networks:
-      - default
       - sdnet
-
   admin:
+    profiles: ["tools"]
     build:
       context: .
       dockerfile: cmd/admin/Dockerfile
