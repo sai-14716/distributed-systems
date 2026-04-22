@@ -61,7 +61,7 @@ func main() {
 		os.Exit(1)
 	}
 
-		fmt.Println("config update committed and applied on all nodes")
+	fmt.Println("config update committed and applied on all nodes")
 }
 
 func parseTargets(s string) []string {
@@ -98,7 +98,7 @@ func waitForLeader(client *http.Client, targets []string, timeout time.Duration)
 
 func submitCommand(client *http.Client, leader string, cmd raft.Command) error {
 	body, _ := json.Marshal(cmd)
-	req, err := http.NewRequest(http.MethodPost, leader+"/client/submit", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, leader+"/admin/submit", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

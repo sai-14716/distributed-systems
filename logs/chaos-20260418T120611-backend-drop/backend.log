@@ -1,0 +1,1 @@
+backend-1-1  | 2026/04/18 06:36:37 [backend] trace=chaos-20260418T120611-backend-drop server=B1 method=GET path=/chat status=200 session=session-chaos-20260418T120611-backend-drop chat=chat-chaos-20260418T120611-backend-drop from=10.10.0.3:57364, 10.10.0.3 endpoint=chat

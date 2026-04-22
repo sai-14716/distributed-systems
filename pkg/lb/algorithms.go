@@ -108,7 +108,7 @@ func (wrr *WeightedRoundRobin) NextBackend(r *Registry, req *http.Request) *Back
 
 	totalWeight := 0.0
 	for _, b := range pool {
-		totalWeight += b.Stats.Weight
+		totalWeight += b.Stats.Weight()
 	}
 
 	wrr.mu.Lock()
@@ -118,7 +118,7 @@ func (wrr *WeightedRoundRobin) NextBackend(r *Registry, req *http.Request) *Back
 	cur := 0.0
 	var best *Backend
 	for _, b := range pool {
-		cur += b.Stats.Weight
+		cur += b.Stats.Weight()
 		if point <= cur {
 			best = b
 			break
@@ -129,6 +129,43 @@ func (wrr *WeightedRoundRobin) NextBackend(r *Registry, req *http.Request) *Back
 	}
 
 	// Record sticky mapping (must be replicated by Raft/Controller team across LBs)
+	r.StickySet(key, best.ID)
+	return best
+}
+
+// ---- Least Load (CPU bucket, then active requests; with session stickiness) ----
+
+type LeastLoad struct{}
+
+func (ll *LeastLoad) NextBackend(r *Registry, req *http.Request) *Backend {
+	key := sessionKey(req)
+
+	if b := r.StickyGet(key); b != nil {
+		return b
+	}
+
+	pool := r.MatchSubset(req.URL.Path, req.Header.Get("X-Role"))
+	if pool == nil {
+		pool = r.GetHealthyBackends()
+	}
+	if len(pool) == 0 {
+		return nil
+	}
+
+	best := pool[0]
+	bestBucket := best.Stats.CPUBucket()
+	bestReqs := atomic.LoadInt32(&best.Stats.ActiveRequests)
+	for i := 1; i < len(pool); i++ {
+		b := pool[i]
+		bucket := b.Stats.CPUBucket()
+		reqs := atomic.LoadInt32(&b.Stats.ActiveRequests)
+		if bucket < bestBucket || (bucket == bestBucket && reqs < bestReqs) {
+			best = b
+			bestBucket = bucket
+			bestReqs = reqs
+		}
+	}
+
 	r.StickySet(key, best.ID)
 	return best
 }

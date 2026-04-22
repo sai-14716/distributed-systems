@@ -1,0 +1,298 @@
+time="2026-04-18T12:06:12+05:30" level=warning msg="/Users/pranayachowdary/Documents/Github/distributed-systems/docker-compose.yaml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+#1 [internal] load local bake definitions
+#1 reading from stdin 4.87kB done
+#1 DONE 0.0s
+
+#2 [node1 internal] load build definition from Dockerfile
+#2 transferring dockerfile: 585B done
+#2 DONE 0.0s
+
+#3 [discovery internal] load build definition from Dockerfile
+#3 transferring dockerfile: 170B done
+#3 DONE 0.0s
+
+#4 [backend-2 internal] load build definition from Dockerfile
+#4 transferring dockerfile: 391B done
+#4 DONE 0.0s
+
+#5 [backend-3 internal] load metadata for docker.io/library/golang:1.22-alpine
+#5 DONE 2.1s
+
+#6 [backend-2 internal] load metadata for docker.io/library/alpine:latest
+#6 DONE 2.1s
+
+#7 [node2 internal] load metadata for docker.io/library/alpine:3.19
+#7 DONE 2.1s
+
+#8 [backend-2 internal] load .dockerignore
+#8 transferring context: 2B done
+#8 DONE 0.0s
+
+#9 [node1 internal] load .dockerignore
+#9 transferring context: 2B done
+#9 DONE 0.0s
+
+#10 [node1 builder 1/5] FROM docker.io/library/golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052
+#10 resolve docker.io/library/golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052 0.0s done
+#10 DONE 0.0s
+
+#11 [backend-2 stage-1 1/3] FROM docker.io/library/alpine:latest@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
+#11 resolve docker.io/library/alpine:latest@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 0.0s done
+#11 DONE 0.0s
+
+#12 [node1 stage-1 1/7] FROM docker.io/library/alpine:3.19@sha256:6baf43584bcb78f2e5847d1de515f23499913ac9f12bdf834811a3145eb11ca1
+#12 resolve docker.io/library/alpine:3.19@sha256:6baf43584bcb78f2e5847d1de515f23499913ac9f12bdf834811a3145eb11ca1 0.0s done
+#12 DONE 0.0s
+
+#13 [backend-3 internal] load build context
+#13 transferring context: 3.29kB done
+#13 DONE 0.0s
+
+#14 [node1 internal] load build context
+#14 transferring context: 45.74kB done
+#14 DONE 0.0s
+
+#15 [backend-3 builder 3/5] RUN go mod init backend
+#15 CACHED
+
+#16 [backend-3 builder 4/5] COPY . .
+#16 CACHED
+
+#17 [backend-3 stage-1 2/3] WORKDIR /root/
+#17 CACHED
+
+#18 [backend-3 builder 5/5] RUN CGO_ENABLED=0 GOOS=linux go build -o server main.go
+#18 CACHED
+
+#19 [backend-3 stage-1 3/3] COPY --from=builder /app/server .
+#19 CACHED
+
+#20 [node1 builder 2/5] WORKDIR /app
+#20 CACHED
+
+#21 [node1 builder 3/9] COPY go.mod ./
+#21 CACHED
+
+#22 [node1 builder 4/9] COPY internal ./internal
+#22 CACHED
+
+#23 [node4 builder 5/9] COPY pkg ./pkg
+#23 DONE 0.0s
+
+#24 [backend-1] exporting to image
+#24 exporting layers done
+#24 exporting manifest sha256:cc5613792f8c087f80c976a2fc0e3862634bdb9e1d41ee1a75dae7986e126260 done
+#24 exporting config sha256:85bd2167885e6d33ac8f4623a61c20388b3012f7b25015fafdd539f2194886e5 done
+#24 exporting attestation manifest sha256:929b0cb2fad94c32f6350e9e1c521a3dcce86b7dc650221185ade8cce3c3990a 0.0s done
+#24 exporting manifest list sha256:ba13a0145c041d35a1e1e30e19bdbdf5dfe1c26220cb9885355847f0fb91cf45 0.0s done
+#24 naming to docker.io/library/distributed-systems-backend-1:latest
+#24 naming to docker.io/library/distributed-systems-backend-1:latest done
+#24 unpacking to docker.io/library/distributed-systems-backend-1:latest done
+#24 DONE 0.1s
+
+#25 [node3 builder 6/9] COPY cmd/node ./cmd/node
+#25 DONE 0.0s
+
+#26 [backend-3] exporting to image
+#26 exporting layers done
+#26 exporting manifest sha256:0c99738a2382b90abf0473a98c8079926435e923f1a4cd183813ab436b954ca1 done
+#26 exporting config sha256:02c964ee80daf173806a105f3fe51c62a0dbda619a20381a5df774c839b2eab9 done
+#26 exporting attestation manifest sha256:6ff18f8013360abbbf882f138c55075ee09eae18203d955c576e526c7286728d 0.0s done
+#26 exporting manifest list sha256:2755b92482491fc11da812f3c4968b33b12581ae5abed41762e98cd1a3c954ac 0.0s done
+#26 naming to docker.io/library/distributed-systems-backend-3:latest done
+#26 unpacking to docker.io/library/distributed-systems-backend-3:latest done
+#26 DONE 0.1s
+
+#27 [backend-2] exporting to image
+#27 exporting layers done
+#27 exporting manifest sha256:68dee39570424f00f7a48522ec1cb69bf99ff1e0771bb31c48064fd049ad93ed done
+#27 exporting config sha256:c920a329fe6fe672d3e1ec8a5f94aa13bfcf040bfc7fdf8b2af0c11f3b8861fc done
+#27 exporting attestation manifest sha256:dc8adab5d85af6a598c11b1a53883619b7e456e0db349a3c206fb586f7983cbb 0.0s done
+#27 exporting manifest list sha256:3233c2eda22a93f5784a961f5d630f28dbe986b16b518ecc9d94e1878a652002 0.0s done
+#27 naming to docker.io/library/distributed-systems-backend-2:latest done
+#27 unpacking to docker.io/library/distributed-systems-backend-2:latest done
+#27 DONE 0.1s
+
+#28 [node5 builder 7/9] COPY cmd/lb ./cmd/lb
+#28 DONE 0.1s
+
+#29 [backend-1] resolving provenance for metadata file
+#29 DONE 0.0s
+
+#30 [backend-3] resolving provenance for metadata file
+#30 DONE 0.0s
+
+#31 [backend-2] resolving provenance for metadata file
+#31 DONE 0.0s
+
+#32 [discovery internal] load metadata for docker.io/library/python:3.12-alpine
+#32 DONE 2.5s
+
+#33 [node1 builder 8/9] RUN go build -o /bin/raft-node ./cmd/node
+#33 ...
+
+#34 [discovery internal] load .dockerignore
+#34 transferring context: 2B done
+#34 DONE 0.0s
+
+#35 [discovery internal] load build context
+#35 transferring context: 28B done
+#35 DONE 0.0s
+
+#36 [discovery 1/3] FROM docker.io/library/python:3.12-alpine@sha256:236173eb74001afe2f60862de935b74fcbd00adfca247b2c27051a70a6a39a2d
+#36 resolve docker.io/library/python:3.12-alpine@sha256:236173eb74001afe2f60862de935b74fcbd00adfca247b2c27051a70a6a39a2d 0.0s done
+#36 DONE 0.0s
+
+#37 [discovery 2/3] WORKDIR /app
+#37 CACHED
+
+#38 [discovery 3/3] COPY dns.py /app/dns.py
+#38 CACHED
+
+#39 [discovery] exporting to image
+#39 exporting layers done
+#39 exporting manifest sha256:5fd5227ac4116ad048914c326e87fbc1e66f9201d7b356679accc0aa8aa28b0d done
+#39 exporting config sha256:2e88d50940c386b89d7dcef9ac928eaa06bf732b9991f0795a73dcfead757f16 done
+#39 exporting attestation manifest sha256:d9f156efef7a1f25e4a9f938c6b31e9946f5d4eb94d0d239dbe3858e31b63df2 0.0s done
+#39 exporting manifest list sha256:ce0eeddb48b4770af4ea97636b8fa8155e638a0d53b1b1d0b05f0f542223cc9e done
+#39 naming to docker.io/library/distributed-systems-discovery:latest done
+#39 unpacking to docker.io/library/distributed-systems-discovery:latest done
+#39 DONE 0.1s
+
+#40 [discovery] resolving provenance for metadata file
+#40 DONE 0.0s
+
+#33 [node1 builder 8/9] RUN go build -o /bin/raft-node ./cmd/node
+#33 DONE 5.6s
+
+#41 [node5 builder 9/9] RUN go build -o /bin/lb ./cmd/lb
+#41 DONE 0.8s
+
+#42 [node1 stage-1 6/7] COPY --from=builder /bin/raft-node /bin/raft-node
+#42 CACHED
+
+#43 [node1 stage-1 2/7] RUN adduser -D -H app
+#43 CACHED
+
+#44 [node1 stage-1 4/7] COPY cmd/node/entrypoint.sh /entrypoint.sh
+#44 CACHED
+
+#45 [node1 stage-1 5/7] RUN chmod +x /entrypoint.sh
+#45 CACHED
+
+#46 [node1 stage-1 3/7] RUN mkdir -p /var/lib/raft && chown -R app:app /var/lib/raft
+#46 CACHED
+
+#47 [node1 stage-1 7/7] COPY --from=builder /bin/lb /bin/lb
+#47 CACHED
+
+#48 [node5] exporting to image
+#48 exporting layers done
+#48 exporting manifest sha256:03bc18445d7201ad0fed4a93a3b0b550921bf81a45cb4500ddf3b063d48b764f done
+#48 exporting config sha256:105449b6a7dc4e0854b5492d019ee9186f891333c84981c8ddd8a1701c136925 done
+#48 exporting attestation manifest sha256:70637d53ad4c3adee179a4c01d70e46b9f0fc1179267703c659c1140a691d9ca 0.0s done
+#48 exporting manifest list sha256:e0e76a02315cbcb75a6ae81c9ed118d2e1bd53821012e7a2a8f1462a8794ca4e
+#48 exporting manifest list sha256:e0e76a02315cbcb75a6ae81c9ed118d2e1bd53821012e7a2a8f1462a8794ca4e 0.0s done
+#48 naming to docker.io/library/distributed-systems-node5:latest done
+#48 unpacking to docker.io/library/distributed-systems-node5:latest 0.0s done
+#48 DONE 0.2s
+
+#49 [node2] exporting to image
+#49 exporting layers done
+#49 exporting manifest sha256:a45b100623146418c5b61210dfec9deba2d49a10456e135862c5c5aafb4a1e2a done
+#49 exporting config sha256:9df00322e13ce730e1af308c713f9468d350b6cb4c312ad147ae22131e10febc done
+#49 exporting attestation manifest sha256:85cd8ff6917deac5e8459b5702262ae961407617508c6a2cc81d2a0d8dcc72a0 0.0s done
+#49 exporting manifest list sha256:c0db6b031ce6dcd8086e7eaff8ab6652512b06765351915ce4d5acb52cd0120f 0.0s done
+#49 naming to docker.io/library/distributed-systems-node2:latest done
+#49 unpacking to docker.io/library/distributed-systems-node2:latest 0.0s done
+#49 DONE 0.2s
+
+#50 [node3] exporting to image
+#50 exporting layers done
+#50 exporting manifest sha256:3cc8acd404f47aba90591e2ffd6bd0a6850247daacf1ed55fd8401269aed4593 done
+#50 exporting config sha256:c26c6d8f7247ead8528fa98c4d1e9d427426f883eebd60fc18c175090de85c74 done
+#50 exporting attestation manifest sha256:20d70115f5bfa625daf3372103f1398dc07c3a9203cc3b8a67349ac9bc9dbcce 0.0s done
+#50 exporting manifest list sha256:4726da901d2bced087e014469469bb956123a61c9492fbe7e04e259f88c36988 0.0s done
+#50 naming to docker.io/library/distributed-systems-node3:latest done
+#50 unpacking to docker.io/library/distributed-systems-node3:latest 0.0s done
+#50 DONE 0.2s
+
+#51 [node1] exporting to image
+#51 exporting layers done
+#51 exporting manifest sha256:2cc54477413533f28d6544b9bd56e0324910b7aa2483202488863e286c0d74f0 done
+#51 exporting config sha256:2c520a9f920689856780a82e5ac3b4fa55e72ef4d643b587f34d7eb3b2b4ad1b done
+#51 exporting attestation manifest sha256:de5a193ceb0dd9202c96bcc8da17089e6fdca61e4fe20a5835b646bacf650827 0.0s done
+#51 exporting manifest list sha256:38a80556468eee77c7a5b175f2e735aa388807c27bc0bd4dc5b1d8f61cf36bea 0.0s done
+#51 naming to docker.io/library/distributed-systems-node1:latest 0.0s done
+#51 unpacking to docker.io/library/distributed-systems-node1:latest 0.0s done
+#51 DONE 0.2s
+
+#52 [node4] exporting to image
+#52 exporting layers done
+#52 exporting manifest sha256:ad7e3993f96f83942680ca8ea38030496abcac3027b18e274c4be9a8fb5f6285 done
+#52 exporting config sha256:7c3ddff7b4016172e0df706feb78ed4be16e554c98bd32648bd26a4e34145978 done
+#52 exporting attestation manifest sha256:9d5abf75c721a5b699ccc672ece689f1b3f6adfed735f14dd3e359749c083251 0.0s done
+#52 exporting manifest list sha256:d872367f13294b2d34a7036ac2118a752d9ba34fbb2e9fcdae0c7d67e3b8914a 0.0s done
+#52 naming to docker.io/library/distributed-systems-node4:latest done
+#52 unpacking to docker.io/library/distributed-systems-node4:latest 0.0s done
+#52 DONE 0.2s
+
+#53 [node3] resolving provenance for metadata file
+#53 DONE 0.1s
+
+#54 [node4] resolving provenance for metadata file
+#54 DONE 0.0s
+
+#55 [node2] resolving provenance for metadata file
+#55 DONE 0.1s
+
+#56 [node1] resolving provenance for metadata file
+#56 DONE 0.0s
+
+#57 [node5] resolving provenance for metadata file
+#57 DONE 0.0s
+ distributed-systems-backend-3  Built
+ distributed-systems-node5  Built
+ distributed-systems-backend-1  Built
+ distributed-systems-node4  Built
+ distributed-systems-node2  Built
+ distributed-systems-node3  Built
+ distributed-systems-backend-2  Built
+ distributed-systems-discovery  Built
+ distributed-systems-node1  Built
+ Container distributed-systems-backend-2-1  Recreate
+ Container distributed-systems-node4-1  Recreate
+ Container distributed-systems-discovery-1  Recreate
+ Container distributed-systems-backend-1-1  Recreate
+ Container distributed-systems-node3-1  Recreate
+ Container distributed-systems-node1-1  Recreate
+ Container distributed-systems-node5-1  Recreate
+ Container distributed-systems-backend-3-1  Recreate
+ Container distributed-systems-node2-1  Recreate
+ Container distributed-systems-backend-3-1  Recreated
+ Container distributed-systems-backend-2-1  Recreated
+ Container distributed-systems-backend-1-1  Recreated
+ Container distributed-systems-node1-1  Recreated
+ Container distributed-systems-node5-1  Recreated
+ Container distributed-systems-node4-1  Recreated
+ Container distributed-systems-discovery-1  Recreated
+ Container distributed-systems-node3-1  Recreated
+ Container distributed-systems-node2-1  Recreated
+ Container distributed-systems-node3-1  Starting
+ Container distributed-systems-node1-1  Starting
+ Container distributed-systems-backend-2-1  Starting
+ Container distributed-systems-node2-1  Starting
+ Container distributed-systems-node4-1  Starting
+ Container distributed-systems-discovery-1  Starting
+ Container distributed-systems-node5-1  Starting
+ Container distributed-systems-backend-1-1  Starting
+ Container distributed-systems-backend-3-1  Starting
+ Container distributed-systems-backend-2-1  Started
+ Container distributed-systems-backend-1-1  Started
+ Container distributed-systems-discovery-1  Started
+ Container distributed-systems-node2-1  Started
+ Container distributed-systems-node5-1  Started
+ Container distributed-systems-backend-3-1  Started
+ Container distributed-systems-node3-1  Started
+ Container distributed-systems-node4-1  Started
+ Container distributed-systems-node1-1  Started

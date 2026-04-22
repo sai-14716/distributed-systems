@@ -21,6 +21,7 @@ type adminMux struct {
 	forwarder *lb.Forwarder
 	registry  *lb.Registry
 	state     *runtimeState
+	load      *lb.ClusterLoad
 }
 
 type runtimeState struct {
@@ -47,21 +48,15 @@ func (a *adminMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("X-Trace-ID", traceID)
 
-	if r.URL.Path == "/admin/fail-backend" && r.Method == http.MethodPost {
-		var req struct {
-			Backend string `json:"backend"`
-			Healthy bool   `json:"healthy"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "bad request", http.StatusBadRequest)
-			log.Printf("[lb-control] trace=%s endpoint=/admin/fail-backend status=400 error=bad_request", traceID)
+	if a.load != nil {
+		if r.URL.Path == "/internal/lb/health" {
+			a.load.HandleHealth(w, r)
 			return
 		}
-		a.registry.SimulateBackendFailure(req.Backend, req.Healthy)
-		log.Printf("[lb-control] trace=%s endpoint=/admin/fail-backend backend=%s healthy=%v status=200", traceID, req.Backend, req.Healthy)
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"backend":"%s","healthy":%v}`, req.Backend, req.Healthy)
-		return
+		if r.URL.Path == "/internal/lb/gossip" {
+			a.load.HandleGossip(w, r)
+			return
+		}
 	}
 
 	if r.URL.Path == "/admin/status" {
@@ -73,6 +68,12 @@ func (a *adminMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.URL.Path == "/admin/load-view" && a.load != nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(a.load.Snapshot())
+		return
+	}
+
 	a.forwarder.ServeHTTP(w, r)
 }
 
@@ -81,6 +82,9 @@ func buildAlgorithm(name string) lb.Algorithm {
 	case "least-req", "least_requests", "leastrequests":
 		log.Println("Using LeastRequests algorithm")
 		return &lb.LeastRequests{}
+	case "least-load", "leastload", "cpu":
+		log.Println("Using LeastLoad algorithm")
+		return &lb.LeastLoad{}
 	case "wrr", "weighted_round_robin", "weightedroundrobin":
 		log.Println("Using WeightedRoundRobin algorithm")
 		return &lb.WeightedRoundRobin{}
@@ -177,8 +181,6 @@ func main() {
 		registry.AddBackend(backendID, u)
 	}
 
-	registry.StartController()
-
 	initialCfg := raft.Config{
 		Algorithm:       getenvDefault("ALGO", "round_robin"),
 		ProbeIntervalMs: 1000,
@@ -187,7 +189,28 @@ func main() {
 
 	forwarder := lb.NewForwarder(registry, buildAlgorithm(initialCfg.Algorithm))
 	state := &runtimeState{config: initialCfg}
-	mux := &adminMux{forwarder: forwarder, registry: registry, state: state}
+
+	selfPeer, peers := deriveLBPeers()
+	load, err := lb.NewClusterLoad(
+		registry,
+		selfPeer,
+		peers,
+		lb.ClusterLoadOptions{TTL: 5 * time.Second, RefreshEvery: 5 * time.Second},
+		func() float64 { return state.getConfig().HealthThreshold },
+		func() time.Duration {
+			ms := state.getConfig().ProbeIntervalMs
+			if ms <= 0 {
+				ms = 1000
+			}
+			return time.Duration(ms) * time.Millisecond
+		},
+	)
+	if err != nil {
+		log.Fatalf("load monitor init failed: %v", err)
+	}
+	load.Start()
+
+	mux := &adminMux{forwarder: forwarder, registry: registry, state: state, load: load}
 
 	controlAddr := getenvDefault("LB_CONTROL_ADDR", "127.0.0.1:18080")
 	go startControlAPI(controlAddr, forwarder, state)
@@ -202,4 +225,63 @@ func getenvDefault(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func deriveLBPeers() (lb.Peer, []lb.Peer) {
+	// LBs run colocated with raft nodes; we reuse NODE_ID/SELF_URL/PEERS to build an all-to-all LB peer list.
+	selfID := getenvDefault("NODE_ID", "lb-unknown")
+	lbAddr := getenvDefault("LB_ADDR", ":8000")
+	lbPort := portFromAddr(lbAddr, "8000")
+
+	selfURL := os.Getenv("SELF_URL")
+	selfBase := "http://127.0.0.1:" + lbPort
+	if selfURL != "" {
+		if u, err := url.Parse(selfURL); err == nil && u.Hostname() != "" {
+			scheme := u.Scheme
+			if scheme == "" {
+				scheme = "http"
+			}
+			selfBase = scheme + "://" + u.Hostname() + ":" + lbPort
+		}
+	}
+
+	self := lb.Peer{ID: selfID, BaseURL: selfBase}
+
+	peersEnv := os.Getenv("PEERS")
+	out := []lb.Peer{self}
+	if peersEnv == "" {
+		return self, out
+	}
+	for _, raw := range strings.Split(peersEnv, ",") {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		u, err := url.Parse(raw)
+		if err != nil || u.Hostname() == "" {
+			continue
+		}
+		id := u.Hostname()
+		if id == selfID {
+			continue
+		}
+		scheme := u.Scheme
+		if scheme == "" {
+			scheme = "http"
+		}
+		out = append(out, lb.Peer{ID: id, BaseURL: scheme + "://" + u.Hostname() + ":" + lbPort})
+	}
+	return self, out
+}
+
+func portFromAddr(addr, fallback string) string {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return fallback
+	}
+	// Handles ":8000", "0.0.0.0:8000", "127.0.0.1:8000".
+	if idx := strings.LastIndex(addr, ":"); idx >= 0 && idx+1 < len(addr) {
+		return addr[idx+1:]
+	}
+	return fallback
 }

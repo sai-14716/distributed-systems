@@ -3,37 +3,56 @@ Architecture runtime in each node container:
 - Control plane process (`/bin/raft-node`) listens on `:19090` for Raft/admin APIs.
 - Control plane pushes committed config locally to data plane via `127.0.0.1:18080`.
 
+Live demo guide: see `docs/DEMO.md`.
+
+Notes:
+- `admin` and `k6-client` are behind Compose profiles (`tools`, `loadtest`) so `docker compose up` won’t accidentally start them.
+- Each node’s Raft control plane is exposed on localhost for observability:
+  - node1 `127.0.0.1:19091`, node2 `:19092`, node3 `:19093`, node4 `:19094`, node5 `:19095`
+
 Start full stack for client tests:
 docker compose up --build discovery backend-1 backend-2 backend-3 node1 node2 node3 node4 node5
 
 Push/load-balancer config through Raft control plane:
-docker compose run --rm admin -algorithm maglev
-docker compose run --rm admin -algorithm wrr
-docker compose run --rm admin -algorithm least-req
+docker compose --profile tools run --rm admin -algorithm maglev
+docker compose --profile tools run --rm admin -algorithm wrr
+docker compose --profile tools run --rm admin -algorithm least-req
+docker compose --profile tools run --rm admin -algorithm least-load
 
 Run one client load container (defaults to stress test):
-docker compose up --build k6-client
+docker compose --profile loadtest up --build k6-client
+
+Backend load simulation + monitoring:
+- Backends do CPU-bound work per request (`WORK_MS`, default 50ms) and expose `/internal/load` with 10% CPU buckets.
+- Each LB owns a subset of backends (rendezvous hashing; primary+secondary) and gossips load deltas to every other LB via `/internal/lb/gossip`.
+- Load info is considered stale after 5s unless refreshed (owners refresh at least every 5s).
+
+Visualizing what happens (logs + JSONL):
+- LB logs include key=value events: `[lb-load] event=probe|publish|takeover|reclaim ...` and `[lb-gossip] event=send|recv ...`
+- Convert live docker logs to JSONL with:
+  - `docker compose logs -f node1 node2 node3 node4 node5 | python3 tooling/visualize/parse_lb_events.py > /tmp/lb_events.jsonl`
+  - then inspect with `jq` (e.g. `jq -c 'select(.event==\"publish\")' /tmp/lb_events.jsonl | head`)
 
 Run multiple client containers:
-docker compose up --build --scale k6-client=10 k6-client
+docker compose --profile loadtest up --build --scale k6-client=10 k6-client
 
 Run a specific k6 test file:
-docker compose run --rm -e K6_SCRIPT=/app/k6/test_flow_consistency.js k6-client
-docker compose run --rm -e K6_SCRIPT=/app/k6/test_health_failover.js k6-client
-docker compose run --rm -e K6_SCRIPT=/app/k6/test_http2_mux.js k6-client
+docker compose --profile loadtest run --rm -e K6_SCRIPT=/app/k6/test_flow_consistency.js k6-client
+docker compose --profile loadtest run --rm -e K6_SCRIPT=/app/k6/test_health_failover.js k6-client
+docker compose --profile loadtest run --rm -e K6_SCRIPT=/app/k6/test_http2_mux.js k6-client
 
-Run direct multi-LB tests inside Docker (targets lb-1/lb-2/lb-3, bypasses discovery proxy):
-docker compose up --build lb-1 lb-2 lb-3
-docker compose run --rm \
+Run direct multi-node dataplane tests inside Docker (bypasses discovery proxy):
+docker compose --profile loadtest run --rm \
 	-e DISABLE_PROXY=1 \
 	-e K6_SCRIPT=/app/k6/test_flow_consistency.js \
-	-e LB_BASE_URLS=http://lb-1:8080,http://lb-2:8080,http://lb-3:8080 \
+	-e LB_BASE_URLS=http://node1:8000,http://node2:8000,http://node3:8000 \
 	k6-client
 
 Quick dataplane status check on nodes:
 curl http://localhost:8001/admin/status
 curl http://localhost:8002/admin/status
 curl http://localhost:8003/admin/status
+curl http://localhost:8001/admin/load-view
 
 Reset and restart cleanly:
 docker compose down -v
@@ -49,24 +68,24 @@ Start cluster (discovery, backends, 5 node containers with both processes)
 docker compose up -d --build discovery backend-1 backend-2 backend-3 node1 node2 node3 node4 node5
 
 Optional: set LB algorithm through Raft control-plane
-docker compose run --rm admin -algorithm maglev
+docker compose --profile tools run --rm admin -algorithm maglev
 or
-docker compose run --rm admin -algorithm wrr
+docker compose --profile tools run --rm admin -algorithm wrr
 or
-docker compose run --rm admin -algorithm least-req
+docker compose --profile tools run --rm admin -algorithm least-req
 
 Run default client load test (discovery-proxy path, stress test)
-docker compose up --build --scale k6-client=10 k6-client
+docker compose --profile loadtest up --build --scale k6-client=10 k6-client
 
 Run specific client tests (direct mode, no discovery proxy interception)
 Use node dataplane endpoints as targets:
-docker compose run --rm -e DISABLE_PROXY=1 -e K6_SCRIPT=/app/k6/test_http11_hol.js -e LB_BASE_URLS=http://node1:8000,http://node2:8000,http://node3:8000 k6-client
+docker compose --profile loadtest run --rm -e DISABLE_PROXY=1 -e K6_SCRIPT=/app/k6/test_http11_hol.js -e LB_BASE_URLS=http://node1:8000,http://node2:8000,http://node3:8000 k6-client
 
 Example for realistic load:
-docker compose run --rm -e DISABLE_PROXY=1 -e K6_SCRIPT=/app/k6/test_realistic_load.js -e LB_BASE_URLS=http://node1:8000,http://node2:8000,http://node3:8000 k6-client
+docker compose --profile loadtest run --rm -e DISABLE_PROXY=1 -e K6_SCRIPT=/app/k6/test_realistic_load.js -e LB_BASE_URLS=http://node1:8000,http://node2:8000,http://node3:8000 k6-client
 
 Example for health failover:
-docker compose run --rm -e DISABLE_PROXY=1 -e K6_SCRIPT=/app/k6/test_health_failover.js -e LB_BASE_URL=http://node1:8000 -e LB_BASE_URLS=http://node1:8000,http://node2:8000,http://node3:8000 k6-client
+docker compose --profile loadtest run --rm -e DISABLE_PROXY=1 -e K6_SCRIPT=/app/k6/test_health_failover.js -e LB_BASE_URL=http://node1:8000 -e LB_BASE_URLS=http://node1:8000,http://node2:8000,http://node3:8000 k6-client
 
 Quick verification:
 
@@ -158,7 +177,7 @@ LEADER=node1
 3. Trigger config update and stop the leader at nearly the same time.
 
 ```bash
-(docker compose run --rm admin -algorithm wrr -probe-interval-ms 700 -health-threshold 0.70 &) \
+(docker compose --profile tools run --rm admin -algorithm wrr -probe-interval-ms 700 -health-threshold 0.70 &) \
 ; sleep 0.2 \
 ; docker compose stop "$LEADER" \
 ; wait
@@ -176,7 +195,7 @@ done
 5. Re-run one config update to confirm convergence after failover.
 
 ```bash
-docker compose run --rm admin -algorithm least-req -probe-interval-ms 900 -health-threshold 0.80
+docker compose --profile tools run --rm admin -algorithm least-req -probe-interval-ms 900 -health-threshold 0.80
 ```
 
 Expected result:
@@ -233,7 +252,7 @@ Goal: exercise sustained throughput and confirm low failure rates.
 1. Run direct multi-node realistic load.
 
 ```bash
-docker compose run --rm \
+docker compose --profile loadtest run --rm \
 	-e DISABLE_PROXY=1 \
 	-e K6_SCRIPT=/app/k6/test_realistic_load.js \
 	-e LB_BASE_URLS=http://node1:8000,http://node2:8000,http://node3:8000,http://node4:8000,http://node5:8000 \
@@ -243,7 +262,7 @@ docker compose run --rm \
 2. Increase concurrent clients via scaling.
 
 ```bash
-docker compose up --build --scale k6-client=10 k6-client
+docker compose --profile loadtest up --build --scale k6-client=10 k6-client
 ```
 
 3. Watch node and backend health while load runs.

@@ -1,0 +1,7 @@
+time="2026-04-18T12:06:25+05:30" level=warning msg="/Users/pranayachowdary/Documents/Github/distributed-systems/docker-compose.yaml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+ Container distributed-systems-node3-1  Running
+ Container distributed-systems-node4-1  Running
+ Container distributed-systems-node2-1  Running
+ Container distributed-systems-node1-1  Running
+ Container distributed-systems-node5-1  Running
+config update committed and applied on all nodes

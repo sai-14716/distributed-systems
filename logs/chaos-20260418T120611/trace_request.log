@@ -1,0 +1,409 @@
+Running traced request with TRACE_ID=chaos-20260418T120611-backend-drop
+time="2026-04-18T12:06:29+05:30" level=warning msg="/Users/pranayachowdary/Documents/Github/distributed-systems/docker-compose.yaml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+#1 [internal] load local bake definitions
+#1 reading from stdin 4.87kB done
+#1 DONE 0.0s
+
+#2 [node4 internal] load build definition from Dockerfile
+#2 transferring dockerfile: 585B 0.0s done
+#2 DONE 0.0s
+
+#3 [backend-3 internal] load build definition from Dockerfile
+#3 transferring dockerfile: 391B done
+#3 DONE 0.0s
+
+#4 [discovery internal] load build definition from Dockerfile
+#4 transferring dockerfile: 170B done
+#4 DONE 0.0s
+
+#5 [backend-1 internal] load metadata for docker.io/library/golang:1.22-alpine
+#5 ...
+
+#6 [discovery internal] load metadata for docker.io/library/python:3.12-alpine
+#6 DONE 0.5s
+
+#7 [discovery internal] load .dockerignore
+#7 transferring context: 2B done
+#7 DONE 0.0s
+
+#5 [node5 internal] load metadata for docker.io/library/golang:1.22-alpine
+#5 DONE 0.6s
+
+#8 [discovery internal] load build context
+#8 transferring context: 28B done
+#8 DONE 0.0s
+
+#9 [backend-3 internal] load metadata for docker.io/library/alpine:latest
+#9 DONE 0.6s
+
+#10 [node2 internal] load metadata for docker.io/library/alpine:3.19
+#10 DONE 0.6s
+
+#11 [discovery 1/3] FROM docker.io/library/python:3.12-alpine@sha256:236173eb74001afe2f60862de935b74fcbd00adfca247b2c27051a70a6a39a2d
+#11 resolve docker.io/library/python:3.12-alpine@sha256:236173eb74001afe2f60862de935b74fcbd00adfca247b2c27051a70a6a39a2d 0.0s done
+#11 DONE 0.0s
+
+#12 [node3 internal] load .dockerignore
+#12 transferring context: 2B done
+#12 DONE 0.0s
+
+#13 [backend-2 internal] load .dockerignore
+#13 transferring context: 2B done
+#13 DONE 0.0s
+
+#14 [discovery 2/3] WORKDIR /app
+#14 CACHED
+
+#15 [discovery 3/3] COPY dns.py /app/dns.py
+#15 CACHED
+
+#16 [node2 stage-1 1/7] FROM docker.io/library/alpine:3.19@sha256:6baf43584bcb78f2e5847d1de515f23499913ac9f12bdf834811a3145eb11ca1
+#16 resolve docker.io/library/alpine:3.19@sha256:6baf43584bcb78f2e5847d1de515f23499913ac9f12bdf834811a3145eb11ca1 0.0s done
+#16 DONE 0.0s
+
+#17 [node3 builder 1/9] FROM docker.io/library/golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052
+#17 resolve docker.io/library/golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052 0.0s done
+#17 DONE 0.0s
+
+#18 [backend-1 stage-1 1/3] FROM docker.io/library/alpine:latest@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
+#18 resolve docker.io/library/alpine:latest@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 0.0s done
+#18 DONE 0.0s
+
+#19 [node3 internal] load build context
+#19 transferring context: 45.74kB done
+#19 DONE 0.0s
+
+#20 [backend-3 internal] load build context
+#20 transferring context: 3.29kB done
+#20 DONE 0.0s
+
+#21 [backend-1 builder 3/5] RUN go mod init backend
+#21 CACHED
+
+#22 [backend-1 builder 4/5] COPY . .
+#22 CACHED
+
+#23 [backend-1 builder 5/5] RUN CGO_ENABLED=0 GOOS=linux go build -o server main.go
+#23 CACHED
+
+#24 [backend-1 stage-1 2/3] WORKDIR /root/
+#24 CACHED
+
+#25 [backend-1 stage-1 3/3] COPY --from=builder /app/server .
+#25 CACHED
+
+#26 [node3 builder 6/9] COPY cmd/node ./cmd/node
+#26 CACHED
+
+#27 [node3 builder 7/9] COPY cmd/lb ./cmd/lb
+#27 CACHED
+
+#28 [node3 builder 5/9] COPY pkg ./pkg
+#28 CACHED
+
+#29 [node3 stage-1 2/7] RUN adduser -D -H app
+#29 CACHED
+
+#30 [node3 builder 8/9] RUN go build -o /bin/raft-node ./cmd/node
+#30 CACHED
+
+#31 [node3 stage-1 6/7] COPY --from=builder /bin/raft-node /bin/raft-node
+#31 CACHED
+
+#32 [node3 builder 3/9] COPY go.mod ./
+#32 CACHED
+
+#33 [node3 stage-1 5/7] RUN chmod +x /entrypoint.sh
+#33 CACHED
+
+#34 [node3 builder 4/9] COPY internal ./internal
+#34 CACHED
+
+#35 [node3 builder 9/9] RUN go build -o /bin/lb ./cmd/lb
+#35 CACHED
+
+#36 [node3 stage-1 3/7] RUN mkdir -p /var/lib/raft && chown -R app:app /var/lib/raft
+#36 CACHED
+
+#37 [node3 stage-1 4/7] COPY cmd/node/entrypoint.sh /entrypoint.sh
+#37 CACHED
+
+#38 [node3 builder 2/9] WORKDIR /app
+#38 CACHED
+
+#39 [node3 stage-1 7/7] COPY --from=builder /bin/lb /bin/lb
+#39 CACHED
+
+#40 [discovery] exporting to image
+#40 exporting layers done
+#40 exporting manifest sha256:5fd5227ac4116ad048914c326e87fbc1e66f9201d7b356679accc0aa8aa28b0d done
+#40 exporting config sha256:2e88d50940c386b89d7dcef9ac928eaa06bf732b9991f0795a73dcfead757f16 done
+#40 exporting attestation manifest sha256:99993ecb58ea4d4e42a1d08304be4d7b869d27fbe9c052d0c36fd9f07903bb90 0.0s done
+#40 exporting manifest list sha256:c1b21e353a29ffd1534d0c5a24c560773fe5e7f701cd0e76f54ad7936153602d done
+#40 naming to docker.io/library/distributed-systems-discovery:latest done
+#40 unpacking to docker.io/library/distributed-systems-discovery:latest 0.0s done
+#40 DONE 0.1s
+
+#41 [backend-2] exporting to image
+#41 exporting layers done
+#41 exporting manifest sha256:68dee39570424f00f7a48522ec1cb69bf99ff1e0771bb31c48064fd049ad93ed done
+#41 exporting config sha256:c920a329fe6fe672d3e1ec8a5f94aa13bfcf040bfc7fdf8b2af0c11f3b8861fc done
+#41 exporting attestation manifest sha256:037b6fb8600947c7543ffdb33d06d18dda9c411bb2822f47fad0ab7845c26e28
+#41 exporting attestation manifest sha256:037b6fb8600947c7543ffdb33d06d18dda9c411bb2822f47fad0ab7845c26e28 0.4s done
+#41 exporting manifest list sha256:62f6459cf2f9265f131c0f2762a75c7469f71402da48146d29e0dcaea82ece33 0.1s done
+#41 naming to docker.io/library/distributed-systems-backend-2:latest
+#41 naming to docker.io/library/distributed-systems-backend-2:latest 0.0s done
+#41 unpacking to docker.io/library/distributed-systems-backend-2:latest 0.0s done
+#41 DONE 0.6s
+
+#42 [backend-1] exporting to image
+#42 exporting layers done
+#42 exporting manifest sha256:cc5613792f8c087f80c976a2fc0e3862634bdb9e1d41ee1a75dae7986e126260 done
+#42 exporting config sha256:85bd2167885e6d33ac8f4623a61c20388b3012f7b25015fafdd539f2194886e5 done
+#42 exporting attestation manifest sha256:36b8f218b6f7baac5e0fe52baca63a807a9da5a74c87ef50a855e526da1eb25c 0.4s done
+#42 exporting manifest list sha256:9158734aa9d3588bc4edeac56231f1dc2a10207141fdecc15bf61ee1a9700480 0.1s done
+#42 naming to docker.io/library/distributed-systems-backend-1:latest 0.0s done
+#42 unpacking to docker.io/library/distributed-systems-backend-1:latest done
+#42 DONE 0.5s
+
+#43 [backend-3] exporting to image
+#43 exporting layers done
+#43 exporting manifest sha256:0c99738a2382b90abf0473a98c8079926435e923f1a4cd183813ab436b954ca1 done
+#43 exporting config sha256:02c964ee80daf173806a105f3fe51c62a0dbda619a20381a5df774c839b2eab9 done
+#43 exporting attestation manifest sha256:774f982e143dee2f83008645e34f2cbfb73897b124ffadaa9307b1e3948c504a 0.3s done
+#43 exporting manifest list sha256:26957e71b750cbd0f4f7dcf38a30d945cad4769a9b0f1816dc29d677f8cd7b19 0.1s done
+#43 naming to docker.io/library/distributed-systems-backend-3:latest 0.0s done
+#43 unpacking to docker.io/library/distributed-systems-backend-3:latest 0.0s done
+#43 DONE 0.6s
+
+#44 [node3] exporting to image
+#44 exporting layers done
+#44 exporting manifest sha256:3cc8acd404f47aba90591e2ffd6bd0a6850247daacf1ed55fd8401269aed4593 0.0s done
+#44 exporting config sha256:c26c6d8f7247ead8528fa98c4d1e9d427426f883eebd60fc18c175090de85c74 0.0s done
+#44 exporting attestation manifest sha256:e8f325d3bf86c5c2219b063112b4071e9f73a3d0731a9850878181106b867b5c 0.2s done
+#44 exporting manifest list sha256:d6e111ede6e0cb66915244a60b213324aa551b678eac84f67d481dce27bdcef4 0.1s done
+#44 naming to docker.io/library/distributed-systems-node3:latest
+#44 naming to docker.io/library/distributed-systems-node3:latest 0.1s done
+#44 unpacking to docker.io/library/distributed-systems-node3:latest
+#44 unpacking to docker.io/library/distributed-systems-node3:latest 0.1s done
+#44 DONE 0.8s
+
+#45 [node2] exporting to image
+#45 exporting layers done
+#45 exporting manifest sha256:a45b100623146418c5b61210dfec9deba2d49a10456e135862c5c5aafb4a1e2a 0.0s done
+#45 exporting config sha256:9df00322e13ce730e1af308c713f9468d350b6cb4c312ad147ae22131e10febc 0.0s done
+#45 exporting attestation manifest sha256:9651e86b82cc496c4fd79ee5ab6842064f646fc93e4c200a3814f0f0be9f6dd9 0.3s done
+#45 exporting manifest list sha256:c0d2547f95aa028f9056eed74c0fe2c19f50307123b0c2bf7d82ca9645f1bb71 0.1s done
+#45 naming to docker.io/library/distributed-systems-node2:latest 0.1s done
+#45 unpacking to docker.io/library/distributed-systems-node2:latest 0.1s done
+#45 DONE 0.7s
+
+#46 [node5] exporting to image
+#46 exporting layers done
+#46 exporting manifest sha256:03bc18445d7201ad0fed4a93a3b0b550921bf81a45cb4500ddf3b063d48b764f 0.0s done
+#46 exporting config sha256:105449b6a7dc4e0854b5492d019ee9186f891333c84981c8ddd8a1701c136925 0.0s done
+#46 exporting attestation manifest sha256:3b42a3d164aefb25bbfde1226e9842c37f524152ffefdeef7974fb7f89829cc9 0.2s done
+#46 exporting manifest list sha256:4243460e313c3cfb491d77ce4e8e4f49e70b38c7d1fe47f8504a2b4b6efc941f 0.1s done
+#46 naming to docker.io/library/distributed-systems-node5:latest 0.1s done
+#46 unpacking to docker.io/library/distributed-systems-node5:latest 0.1s done
+#46 DONE 0.8s
+
+#47 [node1] exporting to image
+#47 exporting layers done
+#47 exporting manifest sha256:2cc54477413533f28d6544b9bd56e0324910b7aa2483202488863e286c0d74f0 0.0s done
+#47 exporting config sha256:2c520a9f920689856780a82e5ac3b4fa55e72ef4d643b587f34d7eb3b2b4ad1b 0.0s done
+#47 exporting attestation manifest sha256:f84f6151838e526c57fc6c56b6febfb0bb3b6ac0fd21476cf9e640063d953949 0.2s done
+#47 exporting manifest list sha256:b410d45b8b54365e040b19476c44179002334fb2a7632df7b73f32692bd21075 0.1s done
+#47 naming to docker.io/library/distributed-systems-node1:latest 0.1s done
+#47 unpacking to docker.io/library/distributed-systems-node1:latest 0.1s done
+#47 DONE 0.8s
+
+#48 [node4] exporting to image
+#48 exporting layers done
+#48 exporting manifest sha256:ad7e3993f96f83942680ca8ea38030496abcac3027b18e274c4be9a8fb5f6285 0.0s done
+#48 exporting config sha256:7c3ddff7b4016172e0df706feb78ed4be16e554c98bd32648bd26a4e34145978 0.0s done
+#48 exporting attestation manifest sha256:51185765282d3e7ca1be93ffb5e710a68513f4594a56b404b49189321de82e5e 0.2s done
+#48 exporting manifest list sha256:e5a20f5cdd2519dfa8764076124a909cf76ec27a182531d508e61599f968428c 0.1s done
+#48 naming to docker.io/library/distributed-systems-node4:latest 0.0s done
+#48 unpacking to docker.io/library/distributed-systems-node4:latest 0.1s done
+#48 DONE 0.8s
+
+#49 [discovery] resolving provenance for metadata file
+#49 DONE 0.1s
+
+#50 [backend-1] resolving provenance for metadata file
+#50 DONE 0.1s
+
+#51 [backend-3] resolving provenance for metadata file
+#51 DONE 0.1s
+
+#52 [backend-2] resolving provenance for metadata file
+#52 DONE 0.1s
+
+#53 [node3] resolving provenance for metadata file
+#53 DONE 0.1s
+
+#54 [node2] resolving provenance for metadata file
+#54 DONE 0.1s
+
+#55 [node4] resolving provenance for metadata file
+#55 DONE 0.1s
+
+#56 [node5] resolving provenance for metadata file
+#56 DONE 0.0s
+
+#57 [node1] resolving provenance for metadata file
+#57 DONE 0.0s
+ distributed-systems-node2  Built
+ distributed-systems-node3  Built
+ distributed-systems-backend-1  Built
+ distributed-systems-node4  Built
+ distributed-systems-node5  Built
+ distributed-systems-backend-3  Built
+ distributed-systems-discovery  Built
+ distributed-systems-node1  Built
+ distributed-systems-backend-2  Built
+ Container distributed-systems-node2-1  Recreate
+ Container distributed-systems-node4-1  Recreate
+ Container distributed-systems-node1-1  Recreate
+ Container distributed-systems-node3-1  Recreate
+ Container distributed-systems-node5-1  Recreate
+ Container distributed-systems-discovery-1  Recreate
+ Container distributed-systems-backend-1-1  Recreate
+ Container distributed-systems-backend-3-1  Recreate
+ Container distributed-systems-backend-2-1  Recreate
+ Container distributed-systems-backend-2-1  Recreated
+ Container distributed-systems-backend-1-1  Recreated
+ Container distributed-systems-backend-3-1  Recreated
+ Container distributed-systems-node2-1  Recreated
+ Container distributed-systems-node1-1  Recreated
+ Container distributed-systems-discovery-1  Recreated
+ Container distributed-systems-node5-1  Recreated
+ Container distributed-systems-node3-1  Recreated
+ Container distributed-systems-node4-1  Recreated
+ Container distributed-systems-backend-2-1  Starting
+ Container distributed-systems-node5-1  Starting
+ Container distributed-systems-backend-1-1  Starting
+ Container distributed-systems-node1-1  Starting
+ Container distributed-systems-discovery-1  Starting
+ Container distributed-systems-node3-1  Starting
+ Container distributed-systems-node2-1  Starting
+ Container distributed-systems-node4-1  Starting
+ Container distributed-systems-backend-3-1  Starting
+ Container distributed-systems-discovery-1  Started
+ Container distributed-systems-backend-1-1  Started
+ Container distributed-systems-node3-1  Started
+ Container distributed-systems-backend-2-1  Started
+ Container distributed-systems-backend-3-1  Started
+ Container distributed-systems-node4-1  Started
+ Container distributed-systems-node2-1  Started
+ Container distributed-systems-node1-1  Started
+ Container distributed-systems-node5-1  Started
+#1 [internal] load local bake definitions
+#1 reading from stdin 5.23kB done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 345B done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/grafana/k6:latest
+#3 DONE 1.5s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 2B done
+#4 DONE 0.0s
+
+#5 [1/7] FROM docker.io/grafana/k6:latest@sha256:82e44a45a38ed22bf5636fe50fe8a07967c3074f7aa66567c6a7501ab9bb3a9f
+#5 resolve docker.io/grafana/k6:latest@sha256:82e44a45a38ed22bf5636fe50fe8a07967c3074f7aa66567c6a7501ab9bb3a9f done
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 42.38kB done
+#6 DONE 0.0s
+
+#7 [3/7] WORKDIR /app
+#7 CACHED
+
+#8 [2/7] RUN apk add --no-cache python3
+#8 CACHED
+
+#9 [4/7] COPY clients/discovery-proxy/service_discovery_client.py /app/service_discovery_client.py
+#9 CACHED
+
+#10 [5/7] COPY clients/k6 /app/k6
+#10 CACHED
+
+#11 [6/7] COPY clients/k6/entrypoint.sh /app/entrypoint.sh
+#11 CACHED
+
+#12 [7/7] RUN chmod +x /app/entrypoint.sh
+#12 CACHED
+
+#13 exporting to image
+#13 exporting layers done
+#13 exporting manifest sha256:c8a4b1fd1075222092913d69d81f9258ca387e768f9536d46a33c77515f144ca done
+#13 exporting config sha256:ebf43e4be71112cb23f60f95b390bd8aae21c5220be916bc8851ac86282014fe done
+#13 exporting attestation manifest sha256:8dd1c3c9397060c2935ef317af0cb98647eba8bca6dedbcf0219fde8c177e5fe done
+#13 exporting manifest list sha256:b698389f23f08319960df7e43ee12dd798e27aa94fb24db40a891b62da9989c7 done
+#13 naming to docker.io/library/distributed-systems-k6-client:latest done
+#13 unpacking to docker.io/library/distributed-systems-k6-client:latest done
+#13 DONE 0.1s
+
+#14 resolving provenance for metadata file
+#14 DONE 0.0s
+--- Discovery Client Proxy Active (http://127.0.0.1:6700) ---
+Discovery server: udp://discovery:6699 (service->endpoints)
+[client-proxy] event=request_sent trace=8264ac81-08cb-46eb-bb63-45492cb6908d method=GET service=api.service.com path=/chat session= chat= role=
+[client-proxy] event=response_received trace=8264ac81-08cb-46eb-bb63-45492cb6908d method=GET service=api.service.com path=/chat endpoint=node2 status=200 lb_backend=backend-1 backend=B1 ack="ack from B1 for trace 8264ac81-08cb-46eb-bb63-45492cb6908d" latency_ms=2
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+
+     execution: local
+        script: /app/k6/trace_request.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 1 max VUs, 10m30s max duration (incl. graceful stop):
+              * default: 1 iterations shared among 1 VUs (maxDuration: 10m0s, gracefulStop: 30s)
+
+time="2026-04-18T06:36:37Z" level=info msg="[client-app] event=request_sent trace=chaos-20260418T120611-backend-drop method=GET url=http://api.service.com:8000/chat session=session-chaos-20260418T120611-backend-drop chat=chat-chaos-20260418T120611-backend-drop role=user" source=console
+[client-proxy] event=request_sent trace=chaos-20260418T120611-backend-drop method=GET service=api.service.com path=/chat session=session-chaos-20260418T120611-backend-drop chat=chat-chaos-20260418T120611-backend-drop role=user
+[client-proxy] event=response_received trace=chaos-20260418T120611-backend-drop method=GET service=api.service.com path=/chat endpoint=node3 status=200 lb_backend=backend-1 backend=B1 ack="ack from B1 for trace chaos-20260418T120611-backend-drop" latency_ms=1
+time="2026-04-18T06:36:37Z" level=info msg="[client-app] event=response_received trace=chaos-20260418T120611-backend-drop status=200 endpoint=node3 lb_backend=backend-1 backend=B1 ack=\"ack from B1 for trace chaos-20260418T120611-backend-drop\"" source=console
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 3       912.628589/s
+    checks_succeeded...: 100.00% 3 out of 3
+    checks_failed......: 0.00%   0 out of 3
+
+    ✓ status is 200
+    ✓ backend id present
+    ✓ backend ack present
+
+    HTTP
+    http_req_duration..............: avg=2.45ms min=2.45ms med=2.45ms max=2.45ms p(90)=2.45ms p(95)=2.45ms
+      { expected_response:true }...: avg=2.45ms min=2.45ms med=2.45ms max=2.45ms p(90)=2.45ms p(95)=2.45ms
+    http_req_failed................: 0.00% 0 out of 1
+    http_reqs......................: 1     304.20953/s
+
+    EXECUTION
+    iteration_duration.............: avg=3.19ms min=3.19ms med=3.19ms max=3.19ms p(90)=3.19ms p(95)=3.19ms
+    iterations.....................: 1     304.20953/s
+
+    NETWORK
+    data_received..................: 600 B 183 kB/s
+    data_sent......................: 295 B 90 kB/s
+
+
+
+
+running (00m00.0s), 0/1 VUs, 1 complete and 0 interrupted iterations
+default ✓ [ 100% ] 1 VUs  00m00.0s/10m0s  1/1 shared iters
+Saved trace logs in: /Users/pranayachowdary/Documents/Github/distributed-systems/logs/chaos-20260418T120611-backend-drop

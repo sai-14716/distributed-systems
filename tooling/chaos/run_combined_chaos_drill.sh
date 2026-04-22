@@ -68,7 +68,7 @@ log "detected current leader: $LEADER_BEFORE"
 if [[ "$RUN_LOAD" == "1" ]]; then
   log "starting background realistic load"
   (
-    docker compose run --rm \
+    docker compose --profile loadtest run --rm \
       -e DISABLE_PROXY=1 \
       -e K6_SCRIPT=/app/k6/test_realistic_load.js \
       -e LB_BASE_URLS=http://node1:8000,http://node2:8000,http://node3:8000,http://node4:8000,http://node5:8000 \
@@ -79,7 +79,7 @@ fi
 
 log "sending config update while dropping leader"
 (
-  docker compose run --rm admin \
+  docker compose --profile tools run --rm admin \
     -targets "$TARGETS" \
     -algorithm "$CONFIG_ALGO_1" \
     -probe-interval-ms 700 \
@@ -104,7 +104,7 @@ fi
 log "new leader detected: $NEW_LEADER"
 
 log "running post-failover config update for convergence"
-docker compose run --rm admin \
+docker compose --profile tools run --rm admin \
   -targets "$TARGETS" \
   -algorithm "$CONFIG_ALGO_2" \
   -probe-interval-ms 900 \
