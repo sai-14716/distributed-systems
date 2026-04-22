@@ -48,6 +48,11 @@ func (f *Forwarder) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	req.Header.Set("X-Trace-ID", traceID)
 	req.Header.Set("X-LB-Node", nodeID)
+	if p := req.Header.Get("X-Packet-Path"); p != "" {
+		req.Header.Set("X-Packet-Path", p+" -> LB("+nodeID+")")
+	} else {
+		req.Header.Set("X-Packet-Path", "LB("+nodeID+")")
+	}
 	w.Header().Set("X-Trace-ID", traceID)
 	w.Header().Set("X-LB-Node", nodeID)
 

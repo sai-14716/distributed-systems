@@ -77,6 +77,10 @@ func (r *Registry) AddBackend(id string, u *url.URL) {
 		if v := resp.Header.Get("X-Server-ID"); v != "" {
 			resp.Header.Set("X-Server-ID", v)
 		}
+		nodeID := resp.Request.Header.Get("X-LB-Node")
+		if p := resp.Header.Get("X-Packet-Path"); p != "" && nodeID != "" {
+			resp.Header.Set("X-Packet-Path", p+" -> LB("+nodeID+")")
+		}
 		return nil
 	}
 	b := &Backend{

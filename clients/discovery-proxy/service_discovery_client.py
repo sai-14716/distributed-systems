@@ -224,15 +224,25 @@ class DiscoveryForwardProxy(BaseHTTPRequestHandler):
             headers["X-Discovery-Service"] = service_name
             headers["X-Discovery-Endpoint"] = endpoint_id
             headers["X-Trace-ID"] = trace_id
+            headers["X-Packet-Path"] = "Client -> ServiceDiscovery"
 
             conn.request(self.command, origin_path, body=body if body else None, headers=headers)
             resp = conn.getresponse()
             raw = resp.read()
             ack = "missing"
+            
+            packet_path = resp.getheader("X-Packet-Path", "")
+            if packet_path:
+                packet_path += " -> ServiceDiscovery -> Client"
+
             if raw:
                 try:
                     parsed = json.loads(raw.decode("utf-8", errors="replace"))
-                    ack = str(parsed.get("ack", "missing")) if isinstance(parsed, dict) else "missing"
+                    if isinstance(parsed, dict):
+                        ack = str(parsed.get("ack", "missing"))
+                        if packet_path:
+                            parsed["packet_path"] = packet_path
+                            raw = json.dumps(parsed).encode("utf-8")
                 except Exception:
                     ack = "invalid_json"
 
@@ -243,6 +253,8 @@ class DiscoveryForwardProxy(BaseHTTPRequestHandler):
             self.send_header("X-Discovery-Service", service_name)
             self.send_header("X-Discovery-Endpoint", endpoint_id)
             self.send_header("X-Trace-ID", trace_id)
+            if packet_path:
+                self.send_header("X-Packet-Path", packet_path)
             for hk, hv in resp.getheaders():
                 if hk.lower() in HOP_BY_HOP_HEADERS:
                     continue

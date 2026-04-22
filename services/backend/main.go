@@ -22,6 +22,7 @@ import (
 var (
 	backendActiveRequests int32
 	backendTotalRequests  int64
+	serverID              string
 )
 
 func trackRequests(h http.HandlerFunc) http.HandlerFunc {
@@ -29,6 +30,13 @@ func trackRequests(h http.HandlerFunc) http.HandlerFunc {
 		atomic.AddInt32(&backendActiveRequests, 1)
 		atomic.AddInt64(&backendTotalRequests, 1)
 		defer atomic.AddInt32(&backendActiveRequests, -1)
+
+		if p := r.Header.Get("X-Packet-Path"); p != "" {
+			w.Header().Set("X-Packet-Path", p+" -> Backend("+serverID+")")
+		} else {
+			w.Header().Set("X-Packet-Path", "Backend("+serverID+")")
+		}
+
 		h(w, r)
 	}
 }
@@ -70,7 +78,7 @@ func formatBytes(b uint64) string {
 }
 
 func main() {
-	serverID := os.Getenv("SERVER_ID")
+	serverID = os.Getenv("SERVER_ID")
 	if serverID == "" {
 		serverID = "test-backend"
 	}

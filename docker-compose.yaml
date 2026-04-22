@@ -160,6 +160,7 @@ services:
     build:
       context: .
       dockerfile: clients/k6/Dockerfile
+    profiles: ["test"]
     environment:
       DISCOVERY_DNS_ADDR: discovery:6699
       DISCOVERY_CLIENT_LISTEN: 127.0.0.1:6700
@@ -176,6 +177,7 @@ services:
     networks:
       - default
       - sdnet
+
   admin:
     build:
       context: .
