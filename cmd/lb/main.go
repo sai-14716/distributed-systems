@@ -263,6 +263,22 @@ func deriveLBPeers() (lb.Peer, []lb.Peer) {
 
 	self := lb.Peer{ID: selfID, BaseURL: selfBase}
 
+	lbPeersEnv := os.Getenv("LB_PEERS")
+	if lbPeersEnv != "" {
+		out := []lb.Peer{self}
+		for _, raw := range strings.Split(lbPeersEnv, ",") {
+			raw = strings.TrimSpace(raw)
+			if raw == "" { continue }
+			parts := strings.SplitN(raw, "=", 2)
+			if len(parts) == 2 {
+				id := strings.TrimSpace(parts[0])
+				if id == selfID { continue }
+				out = append(out, lb.Peer{ID: id, BaseURL: strings.TrimSpace(parts[1])})
+			}
+		}
+		return self, out
+	}
+
 	peersEnv := os.Getenv("PEERS")
 	out := []lb.Peer{self}
 	if peersEnv == "" {
