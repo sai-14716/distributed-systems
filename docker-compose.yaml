@@ -1,35 +1,5 @@
 services:
-  # 3 Symmetric Backends
-  backend-1:
-    build:
-      context: .
-      dockerfile: services/backend/Dockerfile
-    environment:
-      - SERVER_ID=B1
-    ports:
-      - "127.0.0.1:8081:8080"
-    networks:
-      - sdnet
-  backend-2:
-    build:
-      context: .
-      dockerfile: services/backend/Dockerfile
-    environment:
-      - SERVER_ID=B2
-    ports:
-      - "127.0.0.1:8082:8080"
-    networks:
-      - sdnet
-  backend-3:
-    build:
-      context: .
-      dockerfile: services/backend/Dockerfile
-    environment:
-      - SERVER_ID=B3
-    ports:
-      - "127.0.0.1:8083:8080"
-    networks:
-      - sdnet
+  # Laptop B only
   backend-4:
     build:
       context: .
@@ -37,7 +7,7 @@ services:
     environment:
       - SERVER_ID=B4
     ports:
-      - "127.0.0.1:8084:8080"
+      - "8084:8080"
     networks:
       - sdnet
   backend-5:
@@ -47,7 +17,7 @@ services:
     environment:
       - SERVER_ID=B5
     ports:
-      - "127.0.0.1:8085:8080"
+      - "8085:8080"
     networks:
       - sdnet 
   backend-6:
@@ -57,7 +27,7 @@ services:
     environment:
       - SERVER_ID=B6
     ports:
-      - "127.0.0.1:8086:8080"
+      - "8086:8080"
     networks:
       - sdnet
   backend-7:
@@ -67,78 +37,7 @@ services:
     environment:
       - SERVER_ID=B7
     ports:
-      - "127.0.0.1:8087:8080"
-    networks:
-      - sdnet
-  backend-8:
-    build:
-      context: .
-      dockerfile: services/backend/Dockerfile
-    environment:
-      - SERVER_ID=B8
-    ports:
-      - "127.0.0.1:8088:8080"
-    networks:
-      - sdnet
-  backend-9:
-    build:
-      context: .
-      dockerfile: services/backend/Dockerfile
-    environment:
-      - SERVER_ID=B9
-    ports:
-      - "127.0.0.1:8089:8080"
-    networks:
-      - sdnet
-  backend-10:
-    build:
-      context: .
-      dockerfile: services/backend/Dockerfile
-    environment:
-      - SERVER_ID=B10
-    ports:
-      - "127.0.0.1:8090:8080"
-    networks:
-      - sdnet
-
-  node1:
-    build:
-      context: .
-      dockerfile: cmd/node/Dockerfile
-    environment:
-      NODE_ID: node1
-      HTTP_ADDR: :19090
-      SELF_URL: http://node1:19090
-      STATE_FILE: /var/lib/raft/state.json
-      PEERS: http://node2:19090,http://node3:19090,http://node4:19090,http://node5:19090
-      LB_ADDR: :8000
-      LB_CONTROL_ADDR: 127.0.0.1:18080
-      DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
-    volumes:
-      - node1_data:/var/lib/raft
-    ports:
-      - "8001:8000"
-      - "127.0.0.1:19091:19090"
-    networks:
-      - sdnet
-  node2:
-    build:
-      context: .
-      dockerfile: cmd/node/Dockerfile
-    environment:
-      NODE_ID: node2
-      HTTP_ADDR: :19090
-      SELF_URL: http://node2:19090
-      STATE_FILE: /var/lib/raft/state.json
-      PEERS: http://node1:19090,http://node3:19090,http://node4:19090,http://node5:19090
-      LB_ADDR: :8000
-      LB_CONTROL_ADDR: 127.0.0.1:18080
-      DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
-    volumes:
-      - node2_data:/var/lib/raft
-    ports:
-      - "8002:8000"
-      - "127.0.0.1:19092:19090"
+      - "8087:8080"
     networks:
       - sdnet
   node3:
@@ -148,116 +47,63 @@ services:
     environment:
       NODE_ID: node3
       HTTP_ADDR: :19090
-      SELF_URL: http://node3:19090
+      # Must be reachable by peers on other machines (Laptop B port mapping: 19093 -> 19090)
+      SELF_URL: http://${LAPTOP_B_IP}:19093
       STATE_FILE: /var/lib/raft/state.json
-      PEERS: http://node1:19090,http://node2:19090,http://node4:19090,http://node5:19090
+      # Cross-machine peer URLs (no Docker service-name resolution)
+      PEERS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,http://${LAPTOP_C_IP}:19094,http://${LAPTOP_C_IP}:19095
+      # Full backend list (IDs backend-1..backend-10 based on list order)
+      BACKENDS: http://${LAPTOP_A_IP}:8081,http://${LAPTOP_A_IP}:8082,http://${LAPTOP_A_IP}:8083,http://${LAPTOP_B_IP}:8084,http://${LAPTOP_B_IP}:8085,http://${LAPTOP_B_IP}:8086,http://${LAPTOP_B_IP}:8087,http://${LAPTOP_C_IP}:8088,http://${LAPTOP_C_IP}:8089,http://${LAPTOP_C_IP}:8090
       LB_ADDR: :8000
       LB_CONTROL_ADDR: 127.0.0.1:18080
       DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
     volumes:
       - node3_data:/var/lib/raft
     ports:
-      - "8003:8000"
-      - "127.0.0.1:19093:19090"
-    networks:
-      - sdnet
-  node4:
-    build:
-      context: .
-      dockerfile: cmd/node/Dockerfile
-    environment:
-      NODE_ID: node4
-      HTTP_ADDR: :19090
-      SELF_URL: http://node4:19090
-      STATE_FILE: /var/lib/raft/state.json
-      PEERS: http://node1:19090,http://node2:19090,http://node3:19090,http://node5:19090
-      LB_ADDR: :8000
-      LB_CONTROL_ADDR: 127.0.0.1:18080
-      DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
-    volumes:
-      - node4_data:/var/lib/raft
-    networks:
-      - sdnet
-    ports:
-      - "8004:8000"
-      - "127.0.0.1:19094:19090"
-  node5:
-    build:
-      context: .
-      dockerfile: cmd/node/Dockerfile
-    environment:
-      NODE_ID: node5
-      HTTP_ADDR: :19090
-      SELF_URL: http://node5:19090
-      STATE_FILE: /var/lib/raft/state.json
-      PEERS: http://node1:19090,http://node2:19090,http://node3:19090,http://node4:19090
-      LB_ADDR: :8000
-      LB_CONTROL_ADDR: 127.0.0.1:18080
-      DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
-    volumes:
-      - node5_data:/var/lib/raft
-    ports:
-      - "8005:8000"
-      - "127.0.0.1:19095:19090"
+      - "8000:8000"
+      - "19093:19090"
     networks:
       - sdnet
 
-  discovery:
-    build:
-      context: ./services/discovery
-      dockerfile: Dockerfile
-    ports:
-      - "6699:6699/udp"
-      - "6701:6701"
-    networks:
-      - sdnet
-
-  k6-client:
-    profiles: ["loadtest"]
-    build:
-      context: .
-      dockerfile: clients/k6/Dockerfile
-    environment:
-      DISCOVERY_DNS_ADDR: discovery:6699
-      DISCOVERY_CLIENT_LISTEN: 127.0.0.1:6700
-    depends_on:
-      - discovery
-      - backend-1
-      - backend-2
-      - backend-3
-      - node1
-      - node2
-      - node3
-      - node4
-      - node5
-    networks:
-      - sdnet
   admin:
     profiles: ["tools"]
     build:
       context: .
       dockerfile: cmd/admin/Dockerfile
     environment:
-      TARGETS: http://node1:19090,http://node2:19090,http://node3:19090,http://node4:19090,http://node5:19090
+      # node3 is local, so we use its internal Docker name and port
+      # All other nodes are remote, so we use Laptop IPs and mapped ports
+      TARGETS: >
+        http://${LAPTOP_A_IP}:19091,
+        http://${LAPTOP_A_IP}:19092,
+        http://node3:19090,
+        http://${LAPTOP_C_IP}:19094,
+        http://${LAPTOP_C_IP}:19095
     depends_on:
-      - node1
-      - node2
       - node3
-      - node4
-      - node5
+    networks:
+      - sdnet
+  k6-client:
+    profiles: ["loadtest"]
+    build:
+      context: .
+      dockerfile: clients/k6/Dockerfile
+    environment:
+      # Discovery runs on Laptop A
+      DISCOVERY_DNS_ADDR: ${LAPTOP_A_IP}:6699
+      DISCOVERY_CLIENT_LISTEN: 127.0.0.1:6700
+    depends_on:
+      - node3
+      - backend-4
+      - backend-5
+      - backend-6
+      - backend-7
     networks:
       - sdnet
 
 volumes:
-  node1_data:
-  node2_data:
   node3_data:
-  node4_data:
-  node5_data:
 
 networks:
   sdnet:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 10.10.0.0/24

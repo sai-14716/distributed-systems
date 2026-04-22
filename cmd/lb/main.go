@@ -170,7 +170,18 @@ func main() {
 
 	backendEnv := os.Getenv("BACKENDS")
 	if backendEnv == "" {
-		backendEnv = "http://backend-1:8080,http://backend-2:8080,http://backend-3:8080,http://backend-4:8080,http://backend-5:8080,http://backend-6:8080,http://backend-7:8080,http://backend-8:8080,http://backend-9:8080,http://backend-10:8080"
+		a := os.Getenv("LAPTOP_A_IP")
+		b := os.Getenv("LAPTOP_B_IP")
+		c := os.Getenv("LAPTOP_C_IP")
+		if a != "" && b != "" && c != "" {
+			backendEnv = fmt.Sprintf(
+				"http://%s:8081,http://%s:8082,http://%s:8083,http://%s:8084,http://%s:8085,http://%s:8086,http://%s:8087,http://%s:8088,http://%s:8089,http://%s:8090",
+				a, a, a, b, b, b, b, c, c, c,
+			)
+		} else {
+			// Host-local default (useful when running the LB binary outside Docker).
+			backendEnv = "http://127.0.0.1:8081,http://127.0.0.1:8082,http://127.0.0.1:8083,http://127.0.0.1:8084,http://127.0.0.1:8085,http://127.0.0.1:8086,http://127.0.0.1:8087,http://127.0.0.1:8088,http://127.0.0.1:8089,http://127.0.0.1:8090"
+		}
 	}
 	targets := strings.Split(backendEnv, ",")
 
