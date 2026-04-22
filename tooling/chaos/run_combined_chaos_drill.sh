@@ -55,7 +55,7 @@ find_leader() {
 }
 
 log "bringing up cluster"
-docker compose up -d --build discovery backend-1 backend-2 backend-3 node1 node2 node3 node4 node5 \
+docker compose up -d --build discovery backend-1 backend-2 backend-3 backend-4 backend-5 backend-6 backend-7 backend-8 backend-9 backend-10 node1 node2 node3 node4 node5 \
   >"$DRILL_DIR/cluster_up.log" 2>&1
 
 LEADER_BEFORE="$(find_leader || true)"

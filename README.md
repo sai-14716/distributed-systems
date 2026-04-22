@@ -11,7 +11,7 @@ Notes:
   - node1 `127.0.0.1:19091`, node2 `:19092`, node3 `:19093`, node4 `:19094`, node5 `:19095`
 
 Start full stack for client tests:
-docker compose up --build discovery backend-1 backend-2 backend-3 node1 node2 node3 node4 node5
+docker compose up --build discovery backend-1 backend-2 backend-3 backend-4 backend-5 backend-6 backend-7 backend-8 backend-9 backend-10 node1 node2 node3 node4 node5
 
 Push/load-balancer config through Raft control plane:
 docker compose --profile tools run --rm admin -algorithm maglev
@@ -56,7 +56,7 @@ curl http://localhost:8001/admin/load-view
 
 Reset and restart cleanly:
 docker compose down -v
-docker compose up --build discovery backend-1 backend-2 backend-3 node1 node2 node3 node4 node5
+docker compose up --build discovery backend-1 backend-2 backend-3 backend-4 backend-5 backend-6 backend-7 backend-8 backend-9 backend-10 node1 node2 node3 node4 node5
 
 
 ##Exactly how to run it:
@@ -65,7 +65,7 @@ Clean start
 docker compose down -v
 
 Start cluster (discovery, backends, 5 node containers with both processes)
-docker compose up -d --build discovery backend-1 backend-2 backend-3 node1 node2 node3 node4 node5
+docker compose up -d --build discovery backend-1 backend-2 backend-3 backend-4 backend-5 backend-6 backend-7 backend-8 backend-9 backend-10 node1 node2 node3 node4 node5
 
 Optional: set LB algorithm through Raft control-plane
 docker compose --profile tools run --rm admin -algorithm maglev
@@ -146,7 +146,7 @@ Use these drills to validate control-plane resilience, data-plane failover, and 
 
 ```bash
 docker compose down -v
-docker compose up -d --build discovery backend-1 backend-2 backend-3 node1 node2 node3 node4 node5
+docker compose up -d --build discovery backend-1 backend-2 backend-3 backend-4 backend-5 backend-6 backend-7 backend-8 backend-9 backend-10 node1 node2 node3 node4 node5
 ```
 
 Optional: start periodic log snapshots while testing.

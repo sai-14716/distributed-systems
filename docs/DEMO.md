@@ -96,12 +96,15 @@ Demonstrate that algorithms behave differently under controlled conditions:
 # Least-Requests: short request should avoid the backend with more active requests
 bash tooling/demo/least_requests_demo.sh http://127.0.0.1:8001
 
-# WRR vs Least-Load: induce heat on backend-3, compare distributions
-bash tooling/demo/load_weight_demo.sh wrr http://127.0.0.1:8001 50
-bash tooling/demo/load_weight_demo.sh least-load http://127.0.0.1:8001 50
+# Dynamic backend load: keeps changing heat across backend-1/2/3
+bash tooling/demo/dynamic_backend_load.sh 90 3 1800 8
 ```
 
-Each run prints the current load view first and again after the burst, so you can see the CPU buckets that the LB is routing on.
+With dynamic load running, send individual requests and inspect headers to observe algorithm behavior live:
+
+```bash
+bash tooling/demo/show_routing_headers.sh http://127.0.0.1:8001/ 5
+```
 
 Single-command version (runs all algorithm visibility demos):
 

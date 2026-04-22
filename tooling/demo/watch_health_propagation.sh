@@ -57,7 +57,7 @@ def fmt_cell(backend_entry):
     bucket = fmt_int(view.get("bucket"))
     active = fmt_int(view.get("active"))
     epoch = fmt_int(view.get("epoch"))
-    seq = fmt_int(view.get("seq"))
+    seq = fmt_int(view.get("seq"))    
     return f"{st} b{bucket:02d} a{active:02d} e{epoch}/{seq}"
 
 def print_table(rows, nodes):

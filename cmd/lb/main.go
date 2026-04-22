@@ -166,7 +166,7 @@ func main() {
 
 	backendEnv := os.Getenv("BACKENDS")
 	if backendEnv == "" {
-		backendEnv = "http://backend-1:8080,http://backend-2:8080,http://backend-3:8080"
+		backendEnv = "http://backend-1:8080,http://backend-2:8080,http://backend-3:8080,http://backend-4:8080,http://backend-5:8080,http://backend-6:8080,http://backend-7:8080,http://backend-8:8080,http://backend-9:8080,http://backend-10:8080"
 	}
 	targets := strings.Split(backendEnv, ",")
 

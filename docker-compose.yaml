@@ -24,6 +24,62 @@ services:
       - "127.0.0.1:8083:8080"
     networks:
       - sdnet
+  backend-4:
+    build: ./services/backend
+    environment:
+      - SERVER_ID=B4
+    ports:
+      - "127.0.0.1:8084:8080"
+    networks:
+      - sdnet
+  backend-5:
+    build: ./services/backend
+    environment:
+      - SERVER_ID=B5
+    ports:
+      - "127.0.0.1:8085:8080"
+    networks:
+      - sdnet 
+  backend-6:
+    build: ./services/backend
+    environment:
+      - SERVER_ID=B6
+    ports:
+      - "127.0.0.1:8086:8080"
+    networks:
+      - sdnet
+  backend-7:
+    build: ./services/backend
+    environment:
+      - SERVER_ID=B7
+    ports:
+      - "127.0.0.1:8087:8080"
+    networks:
+      - sdnet
+  backend-8:
+    build: ./services/backend
+    environment:
+      - SERVER_ID=B8
+    ports:
+      - "127.0.0.1:8088:8080"
+    networks:
+      - sdnet
+  backend-9:
+    build: ./services/backend
+    environment:
+      - SERVER_ID=B9
+    ports:
+      - "127.0.0.1:8089:8080"
+    networks:
+      - sdnet
+  backend-10:
+    build: ./services/backend
+    environment:
+      - SERVER_ID=B10
+    ports:
+      - "127.0.0.1:8090:8080"
+    networks:
+      - sdnet
 
   node1:
     build:
@@ -44,8 +100,7 @@ services:
       - "8001:8000"
       - "127.0.0.1:19091:19090"
     networks:
-      sdnet:
-        ipv4_address: 10.10.0.11
+      - sdnet
   node2:
     build:
       context: .
@@ -65,8 +120,7 @@ services:
       - "8002:8000"
       - "127.0.0.1:19092:19090"
     networks:
-      sdnet:
-        ipv4_address: 10.10.0.12
+      - sdnet
   node3:
     build:
       context: .
@@ -86,8 +140,7 @@ services:
       - "8003:8000"
       - "127.0.0.1:19093:19090"
     networks:
-      sdnet:
-        ipv4_address: 10.10.0.13
+      - sdnet
   node4:
     build:
       context: .
@@ -104,8 +157,7 @@ services:
     volumes:
       - node4_data:/var/lib/raft
     networks:
-      sdnet:
-        ipv4_address: 10.10.0.14
+      - sdnet
     ports:
       - "8004:8000"
       - "127.0.0.1:19094:19090"
@@ -128,8 +180,7 @@ services:
       - "8005:8000"
       - "127.0.0.1:19095:19090"
     networks:
-      sdnet:
-        ipv4_address: 10.10.0.15
+      - sdnet
 
   discovery:
     build:
@@ -139,8 +190,7 @@ services:
       - "6699:6699/udp"
       - "6701:6701"
     networks:
-      sdnet:
-        ipv4_address: 10.10.0.200
+      - sdnet
 
   k6-client:
     profiles: ["loadtest"]
