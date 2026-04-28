@@ -80,16 +80,16 @@ services:
     networks:
       - sdnet
 
-  # Discovery service - runs ONLY on Laptop A
-  discovery:
-    build:
-      context: ./services/discovery
-      dockerfile: Dockerfile
-    ports:
-      - "6699:6699/udp"
-      - "6701:6701"
-    networks:
-      - sdnet
+  # # Discovery service - runs ONLY on Laptop A
+  # discovery:
+  #   build:
+  #     context: ./services/discovery
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "6699:6699/udp"
+  #     - "6701:6701"
+  #   networks:
+  #     - sdnet
 
   admin:
     build:

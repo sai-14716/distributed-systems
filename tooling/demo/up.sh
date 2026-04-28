@@ -23,7 +23,7 @@ fi
 
 echo "Starting Laptop A services..."
 docker compose up -d --build \
-  discovery backend-1 backend-2 backend-3 \
+  backend-1 backend-2 backend-3 \
   node1 node2
 
 echo
@@ -56,11 +56,11 @@ for backend_name in ["backend-1", "backend-2", "backend-3"]:
     print(f"  {backend_name}: {url}")
 
 print()
-print("Discovery service:")
-http_url = cfg.get_discovery_url("http")
-udp_addr = cfg.get_discovery_url("udp")
-print(f"  HTTP: {http_url}")
-print(f"  UDP: {udp_addr}")
+# print("Discovery service:")
+# http_url = cfg.get_discovery_url("http")
+# udp_addr = cfg.get_discovery_url("udp")
+# print(f"  HTTP: {http_url}")
+# print(f"  UDP: {udp_addr}")
 
 print()
 print("Note: To connect other laptops (B, C), update cluster_config.yaml with their IPs")

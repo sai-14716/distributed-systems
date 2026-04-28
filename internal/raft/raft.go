@@ -20,8 +20,8 @@ import (
 
 const (
 	heartbeatInterval = 200 * time.Millisecond
-	electionMin       = 3000 * time.Millisecond
-	electionMax       = 6000 * time.Millisecond
+	electionMin       = 5000 * time.Millisecond
+	electionMax       = 10000 * time.Millisecond
 	submitTimeout     = 5 * time.Second
 	rpcTimeout        = 1500 * time.Millisecond
 )
