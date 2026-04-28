@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import zlib
 
 
@@ -53,15 +54,24 @@ def owner(points: list[tuple[int, str]], node_ids: list[str], backend_id: str) -
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Compare ring ownership before/after LB membership changes")
-    parser.add_argument("--before-peers", required=True, help="comma-separated peer IDs before change (example: node1,node2,node3,node4,node5)")
+    parser.add_argument("--before-peers", required=True, help="comma-separated peer IDs before change")
     parser.add_argument("--after-peers", required=True, help="comma-separated peer IDs after change")
-    parser.add_argument("--backends", default=",".join(f"backend-{i}" for i in range(1, 11)), help="comma-separated backend IDs")
+    parser.add_argument("--backends", default="", help="comma-separated backend IDs")
+    parser.add_argument("--config", default="cluster_config.yaml", help="cluster topology config")
     parser.add_argument("--replicas", type=int, default=50, help="virtual nodes per peer (default: 50)")
     args = parser.parse_args()
 
     before_peers = parse_csv(args.before_peers)
     after_peers = parse_csv(args.after_peers)
-    backends = parse_csv(args.backends)
+    if args.backends:
+        backends = parse_csv(args.backends)
+    else:
+        try:
+            with open(args.config, encoding="utf-8") as f:
+                cfg = json.load(f)
+            backends = list((cfg.get("backends") or {}).keys())
+        except Exception as exc:
+            raise SystemExit(f"failed to read backend list from {args.config}: {exc}")
 
     if not before_peers or not after_peers or not backends:
         raise SystemExit("before-peers, after-peers, and backends must be non-empty")

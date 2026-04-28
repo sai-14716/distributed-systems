@@ -1,19 +1,34 @@
 #!/bin/sh
 set -eu
 
+CONFIG_PATH="${CLUSTER_CONFIG:-/app/cluster_config.yaml}"
+
 if [ -n "${DISCOVERY_DNS_ADDR:-}" ]; then
   DNS_ADDR="${DISCOVERY_DNS_ADDR}"
-elif [ -n "${LAPTOP_A_IP:-}" ]; then
-  DNS_ADDR="${LAPTOP_A_IP}:6699"
+elif [ -f "${CONFIG_PATH}" ]; then
+  DNS_ADDR="$(python3 - "${CONFIG_PATH}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    cfg = json.load(f)
+
+laptops = cfg["laptops"]
+disc = cfg["discovery"]
+print(f"{laptops[disc['laptop']]}:{disc['udp_port']}")
+PY
+)"
 else
-  echo "[entrypoint] DISCOVERY_DNS_ADDR is required (or set LAPTOP_A_IP to default to <LAPTOP_A_IP>:6699)" 1>&2
+  echo "[entrypoint] DISCOVERY_DNS_ADDR is required or ${CONFIG_PATH} must exist" 1>&2
   exit 1
 fi
-LISTEN_ADDR="${DISCOVERY_CLIENT_LISTEN:-127.0.0.1:6700}"
+LISTEN_ADDR="${DISCOVERY_CLIENT_LISTEN:-0.0.0.0:6700}"
+CONNECT_ADDR="${DISCOVERY_CLIENT_CONNECT:-${LISTEN_ADDR}}"
 
 python3 /app/service_discovery_client.py \
   --listen "${LISTEN_ADDR}" \
   --dns "${DNS_ADDR}" \
+  --config "${CONFIG_PATH}" \
   --cache-ttl-ms "${DISCOVERY_CACHE_TTL_MS:-500}" \
   --max-tries "${DISCOVERY_MAX_TRIES:-3}" &
 
@@ -23,7 +38,7 @@ if [ "${DISABLE_PROXY:-0}" = "1" ]; then
     unset HTTPS_PROXY
     export NO_PROXY="*"
 else
-    export HTTP_PROXY="http://${LISTEN_ADDR}"
+    export HTTP_PROXY="http://${CONNECT_ADDR}"
     export NO_PROXY=""
 fi
 

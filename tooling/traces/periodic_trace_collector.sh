@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+. "$ROOT_DIR/tooling/lib/cluster_config.sh"
 
 INTERVAL_SEC="${1:-30}"
 OUT_DIR="${TRACE_OUT_DIR:-$ROOT_DIR/logs/live}"
@@ -22,8 +23,11 @@ while true; do
   LB_CONTROL_FILE="$SNAPSHOT_DIR/lb_control.log"
   BACKEND_FILE="$SNAPSHOT_DIR/backend.log"
 
+  read -r -a NODE_SERVICES <<<"$(cluster_names nodes)"
+  read -r -a BACKEND_SERVICES <<<"$(cluster_names backends)"
+
   docker compose logs --since "${INTERVAL_SEC}s" \
-    discovery lb-1 lb-2 lb-3 node1 node2 node3 node4 node5 backend-1 backend-2 backend-3 backend-4 backend-5 backend-6 backend-7 backend-8 backend-9 backend-10 2>&1 \
+    discovery "${NODE_SERVICES[@]}" "${BACKEND_SERVICES[@]}" 2>&1 \
     | grep -E '\[client-proxy\]|\[lb-data\]|\[lb-control\]|\[backend\]' > "$TMP_LINES" || true
 
   grep -E '\[client-proxy\]' "$TMP_LINES" > "$CLIENT_PROXY_FILE" || true

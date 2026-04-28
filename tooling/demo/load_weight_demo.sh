@@ -3,14 +3,25 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+. "$ROOT_DIR/tooling/lib/cluster_config.sh"
 
 ALGO="${1:-wrr}"           # wrr | least-load
-LB_URL="${2:-http://127.0.0.1:8001}"
+LB_URL="${2:-$(cluster_first_url load_balancers)}"
 N="${3:-30}"
 HOT_WORK_MS="${4:-5000}"
 HOT_REQUESTS="${5:-8}"
+HOT_BACKEND="${HOT_BACKEND:-$(python3 - <<'PY'
+import json
 
-docker compose --profile tools run --rm admin -algorithm "$ALGO" -timeout 30s >/dev/null
+with open("cluster_config.yaml", encoding="utf-8") as f:
+    cfg = json.load(f)
+
+backends = list((cfg.get("backends") or {}).keys())
+print(backends[2] if len(backends) >= 3 else (backends[0] if backends else ""))
+PY
+)}"
+
+docker compose --profile tools run --rm admin -targets "$(cluster_csv_urls nodes)" -algorithm "$ALGO" -timeout 30s >/dev/null
 
 print_load_snapshot() {
   python3 - "$LB_URL" <<'PY'
@@ -19,8 +30,12 @@ import sys
 import urllib.request
 
 url = sys.argv[1].rstrip("/") + "/admin/load-view"
-with urllib.request.urlopen(url, timeout=1.5) as response:
-  data = json.loads(response.read().decode("utf-8"))
+try:
+  with urllib.request.urlopen(url, timeout=1.0) as response:
+    data = json.loads(response.read().decode("utf-8"))
+except Exception as exc:
+  print(f"  ERR load-view unavailable: {exc.__class__.__name__}")
+  raise SystemExit(0)
 
 backends = data.get("backends", {})
 for backend_id in sorted(backends):
@@ -35,28 +50,28 @@ for backend_id in sorted(backends):
 PY
 }
 
-echo "Warming up load on backend-3 via /payload (sticky rule routes payload -> backend-3)..."
+echo "Warming up load via /payload (observing configured backend views)..."
 heat_pids=()
 for i in $(seq 1 "$HOT_REQUESTS"); do
-  curl -s -o /dev/null "$LB_URL/payload" \
+  ( curl -s --max-time 6 -o /dev/null "$LB_URL/payload" \
     -H "X-Session-ID: warm-$i" \
     -H "X-Work-Ms: $HOT_WORK_MS" \
-    --data-binary "x" &
+    --data-binary "x" || true ) &
   heat_pids+=("$!")
 done
 
 echo "Waiting a bit for LBs to observe CPU bucket changes..."
 sleep 3
 
-observed_bucket="$(curl -s "$LB_URL/admin/load-view" | python3 -c 'import json, sys; data = json.load(sys.stdin); backend = data.get("backends", {}).get("backend-3", {}); view = backend.get("view") or {}; print(view.get("bucket", "na"))')"
-echo "observed backend-3 cpu bucket=${observed_bucket} (5% steps; higher means hotter)"
+observed_bucket="$({ curl -s --max-time 1 "$LB_URL/admin/load-view" || true; } | HOT_BACKEND="$HOT_BACKEND" python3 -c 'import json, os, sys; data = json.load(sys.stdin); backend = data.get("backends", {}).get(os.environ.get("HOT_BACKEND", ""), {}); view = backend.get("view") or {}; print(view.get("bucket", "na"))' 2>/dev/null || printf 'na')"
+echo "observed ${HOT_BACKEND} cpu bucket=${observed_bucket} (5% steps; higher means hotter)"
 echo "current load view:"
 print_load_snapshot
 
 echo "Sending $N requests to / (uses all backends) with algo=$ALGO"
 tmp="$(mktemp)"
 for i in $(seq 1 "$N"); do
-  curl -s -D - -o /dev/null "$LB_URL/" -H "X-Session-ID: demo-$i" -H "X-Work-Ms: 50" \
+  { curl -s --max-time 1 -D - -o /dev/null "$LB_URL/" -H "X-Session-ID: demo-$i" -H "X-Work-Ms: 50" || true; } \
     | awk 'tolower($1) == "x-lb-backend:" {print $2}' | tr -d '\r' >>"$tmp"
 done
 

@@ -8,13 +8,14 @@ set -euo pipefail
 #
 # Examples:
 #   bash tooling/demo/watch_discovery_state.sh 20
-#   bash tooling/demo/watch_discovery_state.sh 30 http://127.0.0.1:6701/debug/state
+#   bash tooling/demo/watch_discovery_state.sh 30 http://<discovery-ip>:6701/debug/state
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+. "$ROOT_DIR/tooling/lib/cluster_config.sh"
 
 SECS="${1:-20}"
-STATE_URL="${2:-http://127.0.0.1:6701/debug/state}"
+STATE_URL="${2:-$(cluster_discovery_http_url debug/state)}"
 
 python3 - <<'PY' "$SECS" "$STATE_URL"
 import json
@@ -27,7 +28,7 @@ url = sys.argv[2]
 
 
 def fetch(endpoint):
-    with urllib.request.urlopen(endpoint, timeout=1.5) as r:
+    with urllib.request.urlopen(endpoint, timeout=1.0) as r:
         return json.loads(r.read().decode("utf-8"))
 
 

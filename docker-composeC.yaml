@@ -1,0 +1,101 @@
+services:
+  # Laptop C: Backends 8-10
+  backend-8:
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
+    environment:
+      - SERVER_ID=C8
+    ports:
+      - "8088:8080"
+    networks:
+      - sdnet
+
+  backend-9:
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
+    environment:
+      - SERVER_ID=C9
+    ports:
+      - "8089:8080"
+    networks:
+      - sdnet
+
+  backend-10:
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
+    environment:
+      - SERVER_ID=C10
+    ports:
+      - "8090:8080"
+    networks:
+      - sdnet
+
+  # Laptop C: Control Plane Node 4
+  node4:
+    build:
+      context: .
+      dockerfile: cmd/node/Dockerfile
+    environment:
+      NODE_ID: node4
+      HTTP_ADDR: :19090
+      SELF_URL: http://${LAPTOP_C_IP}:19094
+      STATE_FILE: /var/lib/raft/state.json
+      PEERS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_C_IP}:19094,http://${LAPTOP_C_IP}:19095
+      BACKENDS: http://${LAPTOP_A_IP}:8081,http://${LAPTOP_A_IP}:8082,http://${LAPTOP_A_IP}:8083,http://${LAPTOP_B_IP}:8084,http://${LAPTOP_B_IP}:8085,http://${LAPTOP_B_IP}:8086,http://${LAPTOP_B_IP}:8087,http://backend-8:8080,http://backend-9:8080,http://backend-10:8080
+      LB_PEERS: node1=http://${LAPTOP_A_IP}:8001,node2=http://${LAPTOP_A_IP}:8002,node3=http://${LAPTOP_B_IP}:8003,node4=http://${LAPTOP_C_IP}:8004,node5=http://${LAPTOP_C_IP}:8005
+      LB_ADDR: :8000
+      LB_CONTROL_ADDR: 127.0.0.1:18080
+      DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
+    volumes:
+      - node4_data:/var/lib/raft
+    ports:
+      - "8004:8000"
+      - "19094:19090"
+    networks:
+      - sdnet
+
+  # Laptop C: Control Plane Node 5
+  node5:
+    build:
+      context: .
+      dockerfile: cmd/node/Dockerfile
+    environment:
+      NODE_ID: node5
+      HTTP_ADDR: :19090
+      SELF_URL: http://${LAPTOP_C_IP}:19095
+      STATE_FILE: /var/lib/raft/state.json
+      PEERS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_C_IP}:19094,http://${LAPTOP_C_IP}:19095
+      BACKENDS: http://${LAPTOP_A_IP}:8081,http://${LAPTOP_A_IP}:8082,http://${LAPTOP_A_IP}:8083,http://${LAPTOP_B_IP}:8084,http://${LAPTOP_B_IP}:8085,http://${LAPTOP_B_IP}:8086,http://${LAPTOP_B_IP}:8087,http://backend-8:8080,http://backend-9:8080,http://backend-10:8080
+      LB_PEERS: node1=http://${LAPTOP_A_IP}:8001,node2=http://${LAPTOP_A_IP}:8002,node3=http://${LAPTOP_B_IP}:8003,node4=http://${LAPTOP_C_IP}:8004,node5=http://${LAPTOP_C_IP}:8005
+      LB_ADDR: :8000
+      LB_CONTROL_ADDR: 127.0.0.1:18080
+      DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
+    volumes:
+      - node5_data:/var/lib/raft
+    ports:
+      - "8005:8000"
+      - "19095:19090"
+    networks:
+      - sdnet
+
+  admin:
+    build:
+      context: .
+      dockerfile: cmd/admin/Dockerfile
+    profiles:
+      - tools
+    environment:
+      TARGETS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_C_IP}:19094,http://${LAPTOP_C_IP}:19095
+    networks:
+      - sdnet
+
+volumes:
+  node4_data:
+  node5_data:
+
+networks:
+  sdnet:
+    driver: bridge

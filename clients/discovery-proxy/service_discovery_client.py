@@ -28,7 +28,7 @@ def _sse_broadcast(event: dict):
 
 # ── DNS ────────────────────────────────────────────────────────────────────────
 
-DNS_SERVER = (os.getenv("LAPTOP_A_IP"), 6699)
+DNS_SERVER = ("", 6699)
 
 HOP_BY_HOP_HEADERS = {
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
@@ -202,7 +202,8 @@ class DiscoveryForwardProxy(BaseHTTPRequestHandler):
             try:
                 import urllib.parse
                 qs = urllib.parse.urlencode({"q": msg})
-                conn = http.client.HTTPConnection("127.0.0.1", _PROXY_PORT, timeout=5)
+                connect_host = os.getenv("DISCOVERY_CLIENT_CONNECT_HOST") or socket.gethostbyname(socket.gethostname())
+                conn = http.client.HTTPConnection(connect_host, _PROXY_PORT, timeout=5)
                 conn.request(
                     "GET", f"http://api.service.com:8000{ep}?{qs}",
                     headers={
@@ -358,14 +359,6 @@ class DiscoveryForwardProxy(BaseHTTPRequestHandler):
         ip, port = node["ip"], int(node["port"])
         endpoint_id = node.get("id", f"{ip}:{port}")
 
-        # Auto-remap Docker internal IPs → localhost mapped ports
-        # 10.10.0.11 → 127.0.0.1:8001, 10.10.0.12 → 8002, etc.
-        if ip.startswith("10.10.0."):
-            last_octet = int(ip.split(".")[-1])
-            if 11 <= last_octet <= 15:
-                ip   = "127.0.0.1"
-                port = 8000 + (last_octet - 10)
-
         conn = http.client.HTTPConnection(ip, port, timeout=0.8)
         try:
             headers = {}
@@ -441,14 +434,22 @@ def main():
     global _PROXY_PORT
 
     parser = argparse.ArgumentParser(description="Service discovery client (HTTP forward proxy).")
-    parser.add_argument("--listen",       default="127.0.0.1:6700")
-    parser.add_argument("--dns",          default="127.0.0.1:6699")
+    parser.add_argument("--listen",       default="0.0.0.0:6700")
+    parser.add_argument("--dns",          default="")
+    parser.add_argument("--config",       default=os.getenv("CLUSTER_CONFIG", "cluster_config.yaml"))
     parser.add_argument("--cache-ttl-ms", type=int, default=500)
     parser.add_argument("--max-tries",    type=int, default=3)
     args = parser.parse_args()
 
-    host, port_s     = args.listen.rsplit(":", 1)
-    dns_host, dns_ps = args.dns.rsplit(":", 1)
+    host, port_s = args.listen.rsplit(":", 1)
+    dns_addr = args.dns
+    if not dns_addr:
+        with open(args.config, encoding="utf-8") as f:
+            cfg = json.load(f)
+        laptops = cfg["laptops"]
+        disc = cfg["discovery"]
+        dns_addr = f"{laptops[disc['laptop']]}:{disc['udp_port']}"
+    dns_host, dns_ps = dns_addr.rsplit(":", 1)
     _PROXY_PORT = int(port_s)
 
     global DNS_SERVER

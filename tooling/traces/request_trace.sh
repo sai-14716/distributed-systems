@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+. "$ROOT_DIR/tooling/lib/cluster_config.sh"
 
 TRACE_ID="${1:-trace-$(date +%Y%m%dT%H%M%S)-$RANDOM}"
 OUT_DIR="${TRACE_OUT_DIR:-$ROOT_DIR/logs}"
@@ -44,8 +45,11 @@ else
   cp "$TMP_K6_OUTPUT" "$K6_FILE"
 fi
 
+read -r -a NODE_SERVICES <<<"$(cluster_names nodes)"
+read -r -a BACKEND_SERVICES <<<"$(cluster_names backends)"
+
 docker compose logs --since "$SINCE_WINDOW" \
-  discovery node1 node2 node3 node4 node5 backend-1 backend-2 backend-3 backend-4 backend-5 backend-6 backend-7 backend-8 backend-9 backend-10 2>&1 \
+  discovery "${NODE_SERVICES[@]}" "${BACKEND_SERVICES[@]}" 2>&1 \
   | grep "$TRACE_ID" > "$TMP_TRACE_LINES" || true
 
 grep -E '\[client-proxy\]' "$TMP_TRACE_LINES" > "$CLIENT_PROXY_FILE" || true

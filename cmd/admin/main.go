@@ -15,22 +15,23 @@ import (
 
 func main() {
 	var (
-		targetsArg      = flag.String("targets", getenvDefault("TARGETS", ""), "comma-separated list of node base URLs")
+		targetsArg      = flag.String("targets", "", "comma-separated list of node base URLs")
+		configPath      = flag.String("config", getenvDefault("CLUSTER_CONFIG", "/app/cluster_config.yaml"), "cluster topology config")
 		algorithm       = flag.String("algorithm", "round_robin", "algorithm name")
 		probeIntervalMs = flag.Int("probe-interval-ms", 1000, "probe interval ms")
 		deadline        = flag.Duration("timeout", 10*time.Second, "overall timeout")
 	)
 	flag.Parse()
 
-	if *targetsArg == "" {
-		fmt.Println("no targets provided")
+	targets, targetByID, err := resolveTargets(*targetsArg, *configPath)
+	if err != nil {
+		fmt.Println(err)
 		os.Exit(1)
 	}
-	targets := parseTargets(*targetsArg)
 
-	client := &http.Client{Timeout: 800 * time.Millisecond}
+	client := &http.Client{Timeout: *deadline}
 
-	leader := waitForLeader(client, targets, *deadline)
+	leader := waitForLeader(client, targets, targetByID, *deadline)
 	if leader == "" {
 		fmt.Println("failed to detect leader")
 		os.Exit(1)
@@ -61,6 +62,62 @@ func main() {
 	fmt.Println("config update committed and applied on all nodes")
 }
 
+type clusterConfig struct {
+	Laptops map[string]string `json:"laptops"`
+	Nodes   map[string]struct {
+		Laptop string `json:"laptop"`
+		Port   int    `json:"port"`
+	} `json:"nodes"`
+}
+
+func resolveTargets(targetsArg, configPath string) ([]string, map[string]string, error) {
+	if targetsArg == "" {
+		targetsArg = os.Getenv("TARGETS")
+	}
+	if targetsArg != "" {
+		targets := parseTargets(targetsArg)
+		if len(targets) == 0 {
+			return nil, nil, fmt.Errorf("no targets provided")
+		}
+		return targets, map[string]string{}, nil
+	}
+
+	targets, targetByID, err := targetsFromConfig(configPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(targets) == 0 {
+		return nil, nil, fmt.Errorf("no nodes configured in %s", configPath)
+	}
+	return targets, targetByID, nil
+}
+
+func targetsFromConfig(path string) ([]string, map[string]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read cluster config %s: %w", path, err)
+	}
+	defer f.Close()
+
+	var cfg clusterConfig
+	if err := json.NewDecoder(f).Decode(&cfg); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse cluster config %s: %w", path, err)
+	}
+
+	targets := make([]string, 0, len(cfg.Nodes))
+	targetByID := make(map[string]string, len(cfg.Nodes))
+	for nodeID, info := range cfg.Nodes {
+		ip, ok := cfg.Laptops[info.Laptop]
+		if !ok || ip == "" {
+			return nil, nil, fmt.Errorf("node %s references unknown laptop %q", nodeID, info.Laptop)
+		}
+		url := fmt.Sprintf("http://%s:%d", ip, info.Port)
+		targets = append(targets, url)
+		targetByID[nodeID] = url
+	}
+	return targets, targetByID, nil
+}
+
 func parseTargets(s string) []string {
 	parts := strings.Split(s, ",")
 	out := make([]string, 0, len(parts))
@@ -73,7 +130,7 @@ func parseTargets(s string) []string {
 	return out
 }
 
-func waitForLeader(client *http.Client, targets []string, timeout time.Duration) string {
+func waitForLeader(client *http.Client, targets []string, targetByID map[string]string, timeout time.Duration) string {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		for _, t := range targets {
@@ -85,7 +142,12 @@ func waitForLeader(client *http.Client, targets []string, timeout time.Duration)
 				return t
 			}
 			if state.LeaderID != "" {
-				return leaderURLFromID(targets, state.LeaderID)
+				if leaderURL := targetByID[state.LeaderID]; leaderURL != "" {
+					return leaderURL
+				}
+				if leaderURL := leaderURLFromID(targets, state.LeaderID); leaderURL != "" {
+					return leaderURL
+				}
 			}
 		}
 		time.Sleep(200 * time.Millisecond)
@@ -119,17 +181,18 @@ func waitForConfig(client *http.Client, targets []string, cfg raft.Config, timeo
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		all := true
+		reachable := 0
 		for _, t := range targets {
 			state, err := getState(client, t)
 			if err != nil {
-				all = false
 				continue
 			}
+			reachable++
 			if state.Config != cfg {
 				all = false
 			}
 		}
-		if all {
+		if reachable > 0 && all {
 			return true
 		}
 		time.Sleep(300 * time.Millisecond)

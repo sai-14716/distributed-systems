@@ -3,9 +3,19 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+. "$ROOT_DIR/tooling/lib/cluster_config.sh"
 
-LB_URL="${1:-http://127.0.0.1:8001}"
-NODE_TO_TOGGLE="${2:-node5}"
+LB_URL="${1:-$(cluster_first_url load_balancers)}"
+NODE_TO_TOGGLE="${2:-$(python3 - <<'PY'
+import json
+
+with open("cluster_config.yaml", encoding="utf-8") as f:
+    cfg = json.load(f)
+
+nodes = list((cfg.get("nodes") or {}).keys())
+print(nodes[-1] if nodes else "")
+PY
+)}"
 OUT_DIR="${3:-/tmp}"
 WAIT_SECS="${WAIT_SECS:-5}"
 
@@ -20,7 +30,7 @@ after_recover_file="$OUT_DIR/owners.after-recover.tsv"
 ########################################
 extract_raw() {
   local out_file="$1"
-  curl -sf "$LB_URL/admin/status" | jq -r '
+  if ! curl -sf --max-time 1 "$LB_URL/admin/status" | jq -r '
     .load_view.backends
     | to_entries
     | sort_by(.key)
@@ -30,7 +40,9 @@ extract_raw() {
         (.value.view.owner_id // "-")
       ]
     | @tsv
-  ' > "$out_file"
+  ' > "$out_file"; then
+    : > "$out_file"
+  fi
 }
 
 ########################################

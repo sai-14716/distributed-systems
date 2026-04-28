@@ -22,7 +22,7 @@ func main() {
 	activityLogFile := getenvDefault("ACTIVITY_LOG_FILE", "/var/lib/raft/activity.log")
 	dataplaneControlURL := getenvDefault("DATAPLANE_CONTROL_URL", "http://127.0.0.1:18080")
 	peersEnv := os.Getenv("PEERS")
-	peers := parsePeers(peersEnv)
+	peers := parsePeers(peersEnv, selfURL)
 
 	setupActivityLogging(activityLogFile)
 
@@ -229,17 +229,24 @@ func (e *httpStatusError) Error() string {
 	return "dataplane apply failed: status=" + http.StatusText(e.statusCode) + " body=" + e.body
 }
 
-func parsePeers(peers string) []string {
+func parsePeers(peers, selfURL string) []string {
 	if peers == "" {
 		return nil
 	}
 	parts := strings.Split(peers, ",")
 	out := make([]string, 0, len(parts))
+	seen := map[string]struct{}{}
+	selfURL = strings.TrimRight(strings.TrimSpace(selfURL), "/")
 	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
+		p = strings.TrimRight(strings.TrimSpace(p), "/")
+		if p == "" || p == selfURL {
+			continue
 		}
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
 	}
 	return out
 }

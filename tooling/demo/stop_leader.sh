@@ -5,18 +5,35 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
 leader="$(
-  python3 - <<'PY'
+python3 - <<'PY'
 import json, urllib.request
-ports = {"node1":19091,"node2":19092,"node3":19093,"node4":19094,"node5":19095}
-for n,p in ports.items():
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+with open("cluster_config.yaml") as f:
+    cfg = json.load(f)
+
+def resolve(service_type, name):
+    info = cfg[service_type][name]
+    ip = cfg["laptops"][info["laptop"]]
+    return ip, info
+
+def fetch_role(n):
+    ip, info = resolve("nodes", n)
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{p}/state", timeout=0.6) as r:
+        with urllib.request.urlopen(f"http://{ip}:{info['port']}/state", timeout=0.6) as r:
             st = json.loads(r.read().decode("utf-8"))
-        if st.get("role") == "leader":
+        return n, st.get("role")
+    except Exception:
+        return n, None
+
+nodes = list(cfg["nodes"].keys())
+with ThreadPoolExecutor(max_workers=min(16, max(1, len(nodes)))) as pool:
+    futures = [pool.submit(fetch_role, n) for n in nodes]
+    for fut in as_completed(futures):
+        n, role = fut.result()
+        if role == "leader":
             print(n)
             raise SystemExit(0)
-    except Exception:
-        continue
 raise SystemExit(1)
 PY
 )" || true

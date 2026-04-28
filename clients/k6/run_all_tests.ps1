@@ -1,3 +1,6 @@
+$env:HTTP_PROXY = "http://127.0.0.1:6700"
+$env:HTTPS_PROXY = "http://127.0.0.1:6700"
+
 $tests = @(
     "test_flow_consistency",
     "test_http11_hol",

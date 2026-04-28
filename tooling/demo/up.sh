@@ -3,22 +3,43 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+. "$ROOT_DIR/tooling/lib/cluster_config.sh"
 
 CLEAN="${1:-}"
 if [[ "$CLEAN" == "--clean" ]]; then
   docker compose down -v --remove-orphans
 fi
 
-docker compose up -d --build \
-  discovery backend-1 backend-2 backend-3 backend-4 backend-5 backend-6 backend-7 backend-8 backend-9 backend-10 \
-  node1 node2 node3 node4 node5
+configured_services="$(python3 - <<'PY'
+import json
+
+with open("cluster_config.yaml", encoding="utf-8") as f:
+    cfg = json.load(f)
+
+services = ["discovery"]
+services.extend((cfg.get("backends") or {}).keys())
+services.extend((cfg.get("nodes") or {}).keys())
+print(" ".join(services))
+PY
+)"
+available_services="$(docker compose config --services)"
+services_to_start=()
+for service in $configured_services; do
+  if printf '%s\n' "$available_services" | grep -Fxq "$service"; then
+    services_to_start+=("$service")
+  fi
+done
+
+if [[ "${#services_to_start[@]}" -eq 0 ]]; then
+  echo "No configured cluster services are present in this compose file." >&2
+  exit 1
+fi
+
+docker compose up -d --build "${services_to_start[@]}"
 
 echo
 echo "Cluster is up."
 echo "Control-plane (Raft) ports on host:"
-echo "  node1 http://127.0.0.1:19091/state"
-echo "  node2 http://127.0.0.1:19092/state"
-echo "  node3 http://127.0.0.1:19093/state"
-echo "  node4 http://127.0.0.1:19094/state"
-echo "  node5 http://127.0.0.1:19095/state"
-
+for node in $(cluster_names nodes); do
+  echo "  $node $(cluster_url nodes "$node" state)"
+done

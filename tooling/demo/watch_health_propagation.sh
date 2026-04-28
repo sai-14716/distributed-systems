@@ -19,19 +19,34 @@ import json
 import sys
 import time
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 secs = int(sys.argv[1])
-lbs = [
-    ("node1", "http://127.0.0.1:8001/admin/load-view"),
-    ("node2", "http://127.0.0.1:8002/admin/load-view"),
-    ("node3", "http://127.0.0.1:8003/admin/load-view"),
-    ("node4", "http://127.0.0.1:8004/admin/load-view"),
-    ("node5", "http://127.0.0.1:8005/admin/load-view"),
-]
+
+with open("cluster_config.yaml") as f:
+    cfg = json.load(f)
+
+laptops = cfg["laptops"]
+
+def resolve(service_type, name):
+    info = cfg[service_type][name]
+    ip = laptops[info["laptop"]]
+    return ip, info
+
+lbs = []
+for name in cfg.get("load_balancers", {}).keys():
+    ip, info = resolve("load_balancers", name)
+    lbs.append((name, f"http://{ip}:{info['port']}/admin/load-view"))
 
 def fetch(url):
-    with urllib.request.urlopen(url, timeout=1.5) as r:
+    with urllib.request.urlopen(url, timeout=1.0) as r:
         return json.loads(r.read().decode("utf-8"))
+
+def fetch_lb(name, url):
+    try:
+        return name, fetch(url)
+    except Exception as e:
+        return name, {"error": f"ERR {e.__class__.__name__}"}
 
 def fmt_int(v):
     try:
@@ -77,11 +92,11 @@ while time.time() < end:
     nodes = [name for name, _ in lbs]
     snapshots = {}
 
-    for name, url in lbs:
-        try:
-            snapshots[name] = fetch(url)
-        except Exception as e:
-            snapshots[name] = {"error": f"ERR {e.__class__.__name__}"}
+    with ThreadPoolExecutor(max_workers=min(16, max(1, len(lbs)))) as pool:
+        futures = [pool.submit(fetch_lb, name, url) for name, url in lbs]
+        for fut in as_completed(futures):
+            name, snap = fut.result()
+            snapshots[name] = snap
 
     backend_ids = set()
     for snap in snapshots.values():

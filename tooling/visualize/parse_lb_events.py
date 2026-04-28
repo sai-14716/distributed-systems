@@ -3,7 +3,7 @@
 Parse Go LB logs from stdin and emit JSON Lines for visualization.
 
 Typical usage:
-  docker compose logs -f node1 node2 node3 node4 node5 | python3 tooling/visualize/parse_lb_events.py > /tmp/lb_events.jsonl
+  docker compose logs -f <node-service> ... | python3 tooling/visualize/parse_lb_events.py > /tmp/lb_events.jsonl
 
 It extracts lines that contain:
   [lb-load] event=...
@@ -26,7 +26,7 @@ def parse_line(line: str):
 
     kind = "lb-load" if "[lb-load]" in line else "lb-gossip"
 
-    # docker compose logs prefix looks like: "node1  | 2026/04/19 12:34:56 ..."
+    # docker compose logs prefix looks like: "<service> | 2026/04/19 12:34:56 ..."
     # Go log prefix looks like: "2026/04/19 12:34:56 ..."
     ts = None
     m = re.search(r"(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})", line)

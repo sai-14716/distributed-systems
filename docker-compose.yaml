@@ -64,9 +64,11 @@ services:
     environment:
       NODE_ID: node3
       HTTP_ADDR: :19090
-      SELF_URL: http://${LAPTOP_B_IP}:19093
+      SELF_URL: 
       STATE_FILE: /var/lib/raft/state.json
-      PEERS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_C_IP}:19094,http://${LAPTOP_C_IP}:19095
+      PEERS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,http://${LAPTOP_C_IP}:19094,http://${LAPTOP_C_IP}:19095
+      BACKENDS: http://${LAPTOP_A_IP}:8081,http://${LAPTOP_A_IP}:8082,http://${LAPTOP_A_IP}:8083,http://backend-4:8080,http://backend-5:8080,http://backend-6:8080,http://backend-7:8080,http://${LAPTOP_C_IP}:8088,http://${LAPTOP_C_IP}:8089,http://${LAPTOP_C_IP}:8090
+      LB_PEERS: node1=http://${LAPTOP_A_IP}:8001,node2=http://${LAPTOP_A_IP}:8002,node3=http://${LAPTOP_B_IP}:8003,node4=http://${LAPTOP_C_IP}:8004,node5=http://${LAPTOP_C_IP}:8005
       LB_ADDR: :8000
       LB_CONTROL_ADDR: 127.0.0.1:18080
       DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
@@ -88,7 +90,9 @@ services:
       HTTP_ADDR: :19090
       SELF_URL: http://${LAPTOP_B_IP}:19094
       STATE_FILE: /var/lib/raft/state.json
-      PEERS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_C_IP}:19094,http://${LAPTOP_C_IP}:19095
+      PEERS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,,http://${LAPTOP_C_IP}:19094,http://${LAPTOP_C_IP}:19095
+      BACKENDS: http://${LAPTOP_A_IP}:8081,http://${LAPTOP_A_IP}:8082,http://${LAPTOP_A_IP}:8083,http://backend-4:8080,http://backend-5:8080,http://backend-6:8080,http://backend-7:8080,http://${LAPTOP_C_IP}:8088,http://${LAPTOP_C_IP}:8089,http://${LAPTOP_C_IP}:8090
+      LB_PEERS: node1=http://${LAPTOP_A_IP}:8001,node2=http://${LAPTOP_A_IP}:8002,node3=http://${LAPTOP_B_IP}:8003,node4=http://${LAPTOP_C_IP}:8004,node5=http://${LAPTOP_C_IP}:8005
       LB_ADDR: :8000
       LB_CONTROL_ADDR: 127.0.0.1:18080
       DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
@@ -106,8 +110,6 @@ services:
       dockerfile: cmd/admin/Dockerfile
     profiles:
       - tools
-    environment:
-      TARGETS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,http://node3:19090,http://node4:19090,http://${LAPTOP_C_IP}:19095
     networks:
       - sdnet
 

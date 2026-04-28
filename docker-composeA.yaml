@@ -1,0 +1,122 @@
+services:
+  # Laptop A: 3 Local Backends
+  # Communication with other backends happens via real IPs from cluster_config.yaml
+  backend-1:
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
+    environment:
+      - SERVER_ID=B1
+    ports:
+      - "8081:8080"
+    networks:
+      - sdnet
+  backend-2:
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
+    environment:
+      - SERVER_ID=B2
+    ports:
+      - "8082:8080"
+    networks:
+      - sdnet
+  backend-3:
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
+    environment:
+      - SERVER_ID=B3
+    ports:
+      - "8083:8080"
+    networks:
+      - sdnet
+
+  # Laptop A: Control Plane Nodes (node1, node2)
+  # These communicate with nodes on laptops B and C via real machine IPs from cluster_config.yaml
+  # SELF_URL and PEERS will be injected via environment at container startup
+  node1:
+    build:
+      context: .
+      dockerfile: cmd/node/Dockerfile
+    environment:
+      NODE_ID: node1
+      HTTP_ADDR: :19090
+      SELF_URL: http://${LAPTOP_A_IP}:19091
+      STATE_FILE: /var/lib/raft/state.json
+      PEERS: http://${LAPTOP_A_IP}:19092,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_C_IP}:19094,http://${LAPTOP_C_IP}:19095
+      BACKENDS: http://backend-1:8080,http://backend-2:8080,http://backend-3:8080,http://${LAPTOP_B_IP}:8084,http://${LAPTOP_B_IP}:8085,http://${LAPTOP_B_IP}:8086,http://${LAPTOP_B_IP}:8087,http://${LAPTOP_C_IP}:8088,http://${LAPTOP_C_IP}:8089,http://${LAPTOP_C_IP}:8090
+      LB_PEERS: node1=http://${LAPTOP_A_IP}:8001,node2=http://${LAPTOP_A_IP}:8002,node3=http://${LAPTOP_B_IP}:8003,node4=http://${LAPTOP_C_IP}:8004,node5=http://${LAPTOP_C_IP}:8005
+      LB_ADDR: :8000
+      LB_CONTROL_ADDR: 127.0.0.1:18080
+      DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
+    volumes:
+      - node1_data:/var/lib/raft
+    ports:
+      - "8001:8000"
+      - "19091:19090"
+    networks:
+      - sdnet
+  node2:
+    build:
+      context: .
+      dockerfile: cmd/node/Dockerfile
+    environment:
+      NODE_ID: node2
+      HTTP_ADDR: :19090
+      SELF_URL: http://${LAPTOP_A_IP}:19092
+      STATE_FILE: /var/lib/raft/state.json
+      PEERS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_C_IP}:19094,http://${LAPTOP_C_IP}:19095
+      BACKENDS: http://backend-1:8080,http://backend-2:8080,http://backend-3:8080,http://${LAPTOP_B_IP}:8084,http://${LAPTOP_B_IP}:8085,http://${LAPTOP_B_IP}:8086,http://${LAPTOP_B_IP}:8087,http://${LAPTOP_C_IP}:8088,http://${LAPTOP_C_IP}:8089,http://${LAPTOP_C_IP}:8090
+      LB_PEERS: node1=http://${LAPTOP_A_IP}:8001,node2=http://${LAPTOP_A_IP}:8002,node3=http://${LAPTOP_B_IP}:8003,node4=http://${LAPTOP_C_IP}:8004,node5=http://${LAPTOP_C_IP}:8005
+      LB_ADDR: :8000
+      LB_CONTROL_ADDR: 127.0.0.1:18080
+      DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
+    volumes:
+      - node2_data:/var/lib/raft
+    ports:
+      - "8002:8000"
+      - "19092:19090"
+    networks:
+      - sdnet
+
+  # Discovery service - runs ONLY on Laptop A
+  discovery:
+    build:
+      context: ./services/discovery
+      dockerfile: Dockerfile
+    ports:
+      - "6699:6699/udp"
+      - "6701:6701"
+    networks:
+      - sdnet
+
+  admin:
+    build:
+      context: .
+      dockerfile: cmd/admin/Dockerfile
+    profiles:
+      - tools
+    environment:
+      TARGETS: http://node1:19090,http://node2:19090,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_B_IP}:19094,http://${LAPTOP_C_IP}:19095
+    networks:
+      - sdnet
+
+  k6-client:
+    build:
+      context: .
+      dockerfile: clients/k6/Dockerfile
+    profiles:
+      - loadtest
+    depends_on:
+      - discovery
+    networks:
+      - sdnet
+
+volumes:
+  node1_data:
+  node2_data:
+
+networks:
+  sdnet:
+    driver: bridge

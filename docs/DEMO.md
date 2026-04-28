@@ -76,6 +76,18 @@ bash tooling/demo/routing_behaviour.sh round_robin
 bash tooling/demo/routing_behaviour.sh maglev
 ```
 
+The first argument above changes the global LB algorithm through Raft before sending requests. To only exercise dataplane routing, leave the current Raft config alone:
+
+```bash
+bash tooling/demo/routing_behaviour.sh --no-config 1000
+```
+
+To send through the discovery/proxy path instead of choosing a reachable LB directly, run the discovery proxy on port 6700 and use DNS mode:
+
+```bash
+bash tooling/demo/routing_behaviour.sh --no-config 1000 demo-fixed fixed dns
+```
+
 If both runs show the same backend, try a different key (for example `demo-fixed-2`), since hashing can map some keys to the same backend under both algorithms.
 
 ## 2.1) Make algorithm choice visible per request
