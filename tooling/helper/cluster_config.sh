@@ -19,16 +19,12 @@ if [[ ! -f "$CLUSTER_CONFIG_FILE" ]]; then
   exit 1
 fi
 
-# Python helper to extract YAML and resolve endpoints
-# This is a workaround since bash doesn't have native YAML support
-declare -A _CONFIG_CACHE
-
 _load_config() {
-  if [[ ${#_CONFIG_CACHE[@]} -gt 0 ]]; then
+  if [[ -n "${_CONFIG_LOADED:-}" ]]; then
     return
   fi
 
-  python3 - <<'PY'
+  python3 - "$CLUSTER_CONFIG_FILE" <<'PY'
 import yaml
 import sys
 
@@ -49,12 +45,13 @@ try:
     print(f"NODE_{node_name}_RAFT_PORT={raft_port}")
     print(f"NODE_{node_name}_LB_PORT={lb_port}")
   
-  # Extract backends
+  # Extract backends (normalize names for shell-safe variable keys)
   for backend_name, backend_info in cfg.get('backends', {}).items():
+    backend_key = ''.join(ch if (ch.isalnum() or ch == '_') else '_' for ch in backend_name)
     laptop = backend_info.get('laptop', '')
     port = backend_info.get('port', '')
-    print(f"BACKEND_{backend_name}_LAPTOP={laptop}")
-    print(f"BACKEND_{backend_name}_PORT={port}")
+    print(f"BACKEND_{backend_key}_LAPTOP={laptop}")
+    print(f"BACKEND_{backend_key}_PORT={port}")
   
   # Extract discovery
   disc = cfg.get('discovery', {})
@@ -70,6 +67,12 @@ PY
 
 # Source the environment variables from config
 eval "$(_load_config)"
+_CONFIG_LOADED=1
+
+_to_var_key() {
+  local input="$1"
+  echo "${input//[^a-zA-Z0-9_]/_}"
+}
 
 # Resolve node URL
 # Usage: get_node_url <node_name> [endpoint]
@@ -106,9 +109,11 @@ get_node_url() {
 get_backend_url() {
   local backend_name="$1"
   local endpoint="${2:-}"
+  local backend_key
+  backend_key="$(_to_var_key "$backend_name")"
   
-  local laptop_var="BACKEND_${backend_name}_LAPTOP"
-  local port_var="BACKEND_${backend_name}_PORT"
+  local laptop_var="BACKEND_${backend_key}_LAPTOP"
+  local port_var="BACKEND_${backend_key}_PORT"
   
   local laptop="${!laptop_var:-}"
   local port="${!port_var:-}"

@@ -7,6 +7,15 @@ cd "$ROOT_DIR"
 # Load cluster config
 source tooling/helper/cluster_config.sh
 
+# Compose expects LAPTOP_*_IP variables; derive them from cluster_config.yaml.
+if [[ -z "${LAPTOP_A:-}" || -z "${LAPTOP_B:-}" || -z "${LAPTOP_C:-}" ]]; then
+  echo "ERROR: Missing laptop IPs in cluster_config.yaml (expected laptops A, B, C)" >&2
+  exit 1
+fi
+export LAPTOP_A_IP="$LAPTOP_A"
+export LAPTOP_B_IP="$LAPTOP_B"
+export LAPTOP_C_IP="$LAPTOP_C"
+
 CLEAN="${1:-}"
 if [[ "$CLEAN" == "--clean" ]]; then
   docker compose down -v --remove-orphans

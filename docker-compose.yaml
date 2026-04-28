@@ -87,6 +87,28 @@ services:
     networks:
       - sdnet
 
+  admin:
+    build:
+      context: .
+      dockerfile: cmd/admin/Dockerfile
+    profiles:
+      - tools
+    environment:
+      TARGETS: http://node1:19090,http://node2:19090,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_B_IP}:19094,http://${LAPTOP_C_IP}:19095
+    networks:
+      - sdnet
+
+  k6-client:
+    build:
+      context: .
+      dockerfile: clients/k6/Dockerfile
+    profiles:
+      - loadtest
+    depends_on:
+      - discovery
+    networks:
+      - sdnet
+
 volumes:
   node1_data:
   node2_data:

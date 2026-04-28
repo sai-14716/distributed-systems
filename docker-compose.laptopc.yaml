@@ -67,6 +67,17 @@ services:
     networks:
       - sdnet
 
+  admin:
+    build:
+      context: .
+      dockerfile: cmd/admin/Dockerfile
+    profiles:
+      - tools
+    environment:
+      TARGETS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_B_IP}:19094,http://node5:19090
+    networks:
+      - sdnet
+
 volumes:
   node5_data:
 
