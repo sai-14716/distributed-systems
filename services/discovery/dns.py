@@ -7,15 +7,27 @@ from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 def _default_registry():
-    # Default matches docker-compose static IPs on the sdnet network.
+    cfg_path = os.getenv("CLUSTER_CONFIG", "cluster_config.yaml")
+    try:
+        with open(cfg_path, encoding="utf-8") as f:
+            cfg = json.load(f)
+    except Exception as exc:
+        raise RuntimeError(f"failed to load discovery registry from {cfg_path}: {exc}") from exc
+
+    laptops = cfg["laptops"]
+    endpoints = []
+    for node_id, info in (cfg.get("load_balancers") or {}).items():
+        endpoints.append(
+            {
+                "ip": laptops[info["laptop"]],
+                "port": int(info["port"]),
+                "id": node_id,
+            }
+        )
+    if not endpoints:
+        raise RuntimeError(f"no load_balancers configured in {cfg_path}")
     return {
-        "api.service.com": deque([
-            {"ip": "10.10.0.11", "port": 8000, "id": "node1"},
-            {"ip": "10.10.0.12", "port": 8000, "id": "node2"},
-            {"ip": "10.10.0.13", "port": 8000, "id": "node3"},
-            {"ip": "10.10.0.14", "port": 8000, "id": "node4"},
-            {"ip": "10.10.0.15", "port": 8000, "id": "node5"},
-        ])
+        "api.service.com": deque(endpoints)
     }
 
 
@@ -132,7 +144,7 @@ def resolve_service(service_name):
     ]
     return alive_endpoints
 
-def start_discovery_server(host="127.0.0.1", port=6699):
+def start_discovery_server(host="0.0.0.0", port=6699):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind((host, port))
@@ -147,8 +159,10 @@ def start_discovery_server(host="127.0.0.1", port=6699):
 
         if endpoints:
             response = json.dumps(endpoints).encode("utf-8")
+            print(f"[dns] {addr[0]}:{addr[1]} query='{query}' -> {len(endpoints)} node(s) returned", flush=True)
         else:
             response = json.dumps({"error": "NXDOMAIN"}).encode("utf-8")
+            print(f"[dns] {addr[0]}:{addr[1]} query='{query}' -> NXDOMAIN", flush=True)
 
         sock.sendto(response, addr)
 

@@ -8,10 +8,24 @@
 #   get_backend_url "backend-3"          # -> http://IP:port/
 #   get_discovery_url "http"            # -> http://IP:6701
 
-set -euo pipefail
+set -eu
+set -o pipefail 2>/dev/null || true
 
-# Detect root directory
-CLUSTER_CONFIG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Detect root directory by walking up from the current directory.
+# This keeps the helper usable when sourced from either bash or zsh.
+_cluster_config_find_root() {
+  local root="$PWD"
+  while [[ "$root" != "/" ]]; do
+    if [[ -f "$root/cluster_config.yaml" ]]; then
+      printf '%s\n' "$root"
+      return 0
+    fi
+    root="$(cd "$root/.." && pwd)"
+  done
+  return 1
+}
+
+CLUSTER_CONFIG_ROOT="$(_cluster_config_find_root)"
 CLUSTER_CONFIG_FILE="${CLUSTER_CONFIG_ROOT}/cluster_config.yaml"
 
 if [[ ! -f "$CLUSTER_CONFIG_FILE" ]]; then
@@ -34,30 +48,31 @@ try:
   
   # Extract laptops
   for laptop, ip in cfg.get('laptops', {}).items():
-    print(f"LAPTOP_{laptop}={ip}")
+    print(f"export LAPTOP_{laptop}={ip}")
+    print(f"export LAPTOP_{laptop}_IP={ip}")
   
   # Extract nodes
   for node_name, node_info in cfg.get('nodes', {}).items():
     laptop = node_info.get('laptop', '')
     raft_port = node_info.get('raft_port', '')
     lb_port = node_info.get('lb_port', '')
-    print(f"NODE_{node_name}_LAPTOP={laptop}")
-    print(f"NODE_{node_name}_RAFT_PORT={raft_port}")
-    print(f"NODE_{node_name}_LB_PORT={lb_port}")
+    print(f"export NODE_{node_name}_LAPTOP={laptop}")
+    print(f"export NODE_{node_name}_RAFT_PORT={raft_port}")
+    print(f"export NODE_{node_name}_LB_PORT={lb_port}")
   
   # Extract backends (normalize names for shell-safe variable keys)
   for backend_name, backend_info in cfg.get('backends', {}).items():
     backend_key = ''.join(ch if (ch.isalnum() or ch == '_') else '_' for ch in backend_name)
     laptop = backend_info.get('laptop', '')
     port = backend_info.get('port', '')
-    print(f"BACKEND_{backend_key}_LAPTOP={laptop}")
-    print(f"BACKEND_{backend_key}_PORT={port}")
+    print(f"export BACKEND_{backend_key}_LAPTOP={laptop}")
+    print(f"export BACKEND_{backend_key}_PORT={port}")
   
   # Extract discovery
   disc = cfg.get('discovery', {})
-  print(f"DISCOVERY_LAPTOP={disc.get('laptop', '')}")
-  print(f"DISCOVERY_UDP_PORT={disc.get('udp_port', '')}")
-  print(f"DISCOVERY_HTTP_PORT={disc.get('http_port', '')}")
+  print(f"export DISCOVERY_LAPTOP={disc.get('laptop', '')}")
+  print(f"export DISCOVERY_UDP_PORT={disc.get('udp_port', '')}")
+  print(f"export DISCOVERY_HTTP_PORT={disc.get('http_port', '')}")
 
 except Exception as e:
   print(f"ERROR: Failed to load config: {e}", file=sys.stderr)
@@ -84,8 +99,9 @@ get_node_url() {
   local laptop_var="NODE_${node_name}_LAPTOP"
   local port_var="NODE_${node_name}_RAFT_PORT"
   
-  local laptop="${!laptop_var:-}"
-  local port="${!port_var:-}"
+  local laptop port
+  eval "laptop=\${${laptop_var}-}"
+  eval "port=\${${port_var}-}"
   
   if [[ -z "$laptop" || -z "$port" ]]; then
     echo "ERROR: Unknown node: $node_name" >&2
@@ -93,7 +109,8 @@ get_node_url() {
   fi
   
   local ip_var="LAPTOP_${laptop}"
-  local ip="${!ip_var:-}"
+  local ip
+  eval "ip=\${${ip_var}-}"
   
   if [[ -z "$ip" ]]; then
     echo "ERROR: Unknown laptop: $laptop" >&2
@@ -115,8 +132,9 @@ get_backend_url() {
   local laptop_var="BACKEND_${backend_key}_LAPTOP"
   local port_var="BACKEND_${backend_key}_PORT"
   
-  local laptop="${!laptop_var:-}"
-  local port="${!port_var:-}"
+  local laptop port
+  eval "laptop=\${${laptop_var}-}"
+  eval "port=\${${port_var}-}"
   
   if [[ -z "$laptop" || -z "$port" ]]; then
     echo "ERROR: Unknown backend: $backend_name" >&2
@@ -124,7 +142,8 @@ get_backend_url() {
   fi
   
   local ip_var="LAPTOP_${laptop}"
-  local ip="${!ip_var:-}"
+  local ip
+  eval "ip=\${${ip_var}-}"
   
   if [[ -z "$ip" ]]; then
     echo "ERROR: Unknown laptop: $laptop" >&2
@@ -143,8 +162,9 @@ get_lb_url() {
   local laptop_var="NODE_${node_name}_LAPTOP"
   local port_var="NODE_${node_name}_LB_PORT"
   
-  local laptop="${!laptop_var:-}"
-  local port="${!port_var:-}"
+  local laptop port
+  eval "laptop=\${${laptop_var}-}"
+  eval "port=\${${port_var}-}"
   
   if [[ -z "$laptop" || -z "$port" ]]; then
     echo "ERROR: Unknown node/LB: $node_name" >&2
@@ -152,7 +172,8 @@ get_lb_url() {
   fi
   
   local ip_var="LAPTOP_${laptop}"
-  local ip="${!ip_var:-}"
+  local ip
+  eval "ip=\${${ip_var}-}"
   
   if [[ -z "$ip" ]]; then
     echo "ERROR: Unknown laptop: $laptop" >&2
@@ -177,7 +198,8 @@ get_discovery_url() {
   fi
   
   local ip_var="LAPTOP_${laptop}"
-  local ip="${!ip_var:-}"
+  local ip
+  eval "ip=\${${ip_var}-}"
   
   if [[ -z "$ip" ]]; then
     echo "ERROR: Unknown laptop for discovery: $laptop" >&2
@@ -242,11 +264,3 @@ fetch_json() {
   fetch_url "$url" | jq -r "$jq_filter" 2>/dev/null || echo ""
 }
 
-export -f get_node_url
-export -f get_backend_url
-export -f get_lb_url
-export -f get_discovery_url
-export -f get_all_nodes
-export -f get_all_backends
-export -f fetch_url
-export -f fetch_json

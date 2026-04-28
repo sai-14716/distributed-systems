@@ -1,4 +1,4 @@
-# Distributed Cluster Topology Configuration
+ # Distributed Cluster Topology Configuration
 # This file defines which services run on which laptops and their exposed ports.
 # All inter-machine communication must use these exact IPs and ports.
 #
@@ -6,7 +6,7 @@
 
 # Laptop IP addresses - UPDATE THESE WITH ACTUAL MACHINE IPs
 laptops:
-  A: "10.145.131.183" # Primary control plane + discovery + some backends
+  A: "10.145.46.226" # Primary control plane + discovery + some backends
   B: "10.145.109.136" # Secondary control plane + some backends
   C: "10.145.89.63" # Tertiary control plane + some backends
 

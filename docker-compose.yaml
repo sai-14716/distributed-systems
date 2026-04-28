@@ -45,6 +45,8 @@ services:
       SELF_URL: http://${LAPTOP_A_IP}:19091
       STATE_FILE: /var/lib/raft/state.json
       PEERS: http://${LAPTOP_A_IP}:19092,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_C_IP}:19094,http://${LAPTOP_C_IP}:19095
+      BACKENDS: http://backend-1:8080,http://backend-2:8080,http://backend-3:8080,http://${LAPTOP_B_IP}:8084,http://${LAPTOP_B_IP}:8085,http://${LAPTOP_B_IP}:8086,http://${LAPTOP_B_IP}:8087,http://${LAPTOP_C_IP}:8088,http://${LAPTOP_C_IP}:8089,http://${LAPTOP_C_IP}:8090
+      LB_PEERS: node1=http://${LAPTOP_A_IP}:8001,node2=http://${LAPTOP_A_IP}:8002,node3=http://${LAPTOP_B_IP}:8003,node4=http://${LAPTOP_C_IP}:8004,node5=http://${LAPTOP_C_IP}:8005
       LB_ADDR: :8000
       LB_CONTROL_ADDR: 127.0.0.1:18080
       DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
@@ -65,6 +67,8 @@ services:
       SELF_URL: http://${LAPTOP_A_IP}:19092
       STATE_FILE: /var/lib/raft/state.json
       PEERS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_C_IP}:19094,http://${LAPTOP_C_IP}:19095
+      BACKENDS: http://backend-1:8080,http://backend-2:8080,http://backend-3:8080,http://${LAPTOP_B_IP}:8084,http://${LAPTOP_B_IP}:8085,http://${LAPTOP_B_IP}:8086,http://${LAPTOP_B_IP}:8087,http://${LAPTOP_C_IP}:8088,http://${LAPTOP_C_IP}:8089,http://${LAPTOP_C_IP}:8090
+      LB_PEERS: node1=http://${LAPTOP_A_IP}:8001,node2=http://${LAPTOP_A_IP}:8002,node3=http://${LAPTOP_B_IP}:8003,node4=http://${LAPTOP_C_IP}:8004,node5=http://${LAPTOP_C_IP}:8005
       LB_ADDR: :8000
       LB_CONTROL_ADDR: 127.0.0.1:18080
       DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
