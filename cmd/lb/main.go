@@ -170,18 +170,7 @@ func main() {
 
 	backendEnv := os.Getenv("BACKENDS")
 	if backendEnv == "" {
-		a := os.Getenv("LAPTOP_A_IP")
-		b := os.Getenv("LAPTOP_B_IP")
-		c := os.Getenv("LAPTOP_C_IP")
-		if a != "" && b != "" && c != "" {
-			backendEnv = fmt.Sprintf(
-				"http://%s:8081,http://%s:8082,http://%s:8083,http://%s:8084,http://%s:8085,http://%s:8086,http://%s:8087,http://%s:8088,http://%s:8089,http://%s:8090",
-				a, a, a, b, b, b, b, c, c, c,
-			)
-		} else {
-			// Host-local default (useful when running the LB binary outside Docker).
-			backendEnv = "http://127.0.0.1:8081,http://127.0.0.1:8082,http://127.0.0.1:8083,http://127.0.0.1:8084,http://127.0.0.1:8085,http://127.0.0.1:8086,http://127.0.0.1:8087,http://127.0.0.1:8088,http://127.0.0.1:8089,http://127.0.0.1:8090"
-		}
+		backendEnv = "http://backend-1:8080,http://backend-2:8080,http://backend-3:8080,http://backend-4:8080,http://backend-5:8080,http://backend-6:8080,http://backend-7:8080,http://backend-8:8080,http://backend-9:8080,http://backend-10:8080"
 	}
 	targets := strings.Split(backendEnv, ",")
 
@@ -263,49 +252,67 @@ func deriveLBPeers() (lb.Peer, []lb.Peer) {
 
 	self := lb.Peer{ID: selfID, BaseURL: selfBase}
 
+	// Prefer LB_PEERS if set, else fall back to PEERS
 	lbPeersEnv := os.Getenv("LB_PEERS")
+	peersEnv := os.Getenv("PEERS")
+	out := []lb.Peer{self}
+
 	if lbPeersEnv != "" {
-		out := []lb.Peer{self}
-		for _, raw := range strings.Split(lbPeersEnv, ",") {
-			raw = strings.TrimSpace(raw)
-			if raw == "" {
+		for _, entry := range strings.Split(lbPeersEnv, ",") {
+			entry = strings.TrimSpace(entry)
+			if entry == "" {
 				continue
 			}
-			parts := strings.SplitN(raw, "=", 2)
-			if len(parts) == 2 {
-				id := strings.TrimSpace(parts[0])
-				if id == selfID {
-					continue
-				}
-				out = append(out, lb.Peer{ID: id, BaseURL: strings.TrimSpace(parts[1])})
+			parts := strings.SplitN(entry, "=", 2)
+			if len(parts) != 2 {
+				continue
 			}
+			id := parts[0]
+			peerURL := parts[1]
+			if id == selfID {
+				continue
+			}
+			u, err := url.Parse(peerURL)
+			if err != nil || u.Hostname() == "" {
+				continue
+			}
+			scheme := u.Scheme
+			if scheme == "" {
+				scheme = "http"
+			}
+			port := u.Port()
+			if port == "" {
+				port = lbPort
+			}
+			out = append(out, lb.Peer{ID: id, BaseURL: scheme + "://" + u.Hostname() + ":" + port})
 		}
 		return self, out
 	}
 
-	peersEnv := os.Getenv("PEERS")
-	out := []lb.Peer{self}
-	if peersEnv == "" {
-		return self, out
-	}
-	for _, raw := range strings.Split(peersEnv, ",") {
-		raw = strings.TrimSpace(raw)
-		if raw == "" {
-			continue
+	if peersEnv != "" {
+		for _, raw := range strings.Split(peersEnv, ",") {
+			raw = strings.TrimSpace(raw)
+			if raw == "" {
+				continue
+			}
+			u, err := url.Parse(raw)
+			if err != nil || u.Hostname() == "" {
+				continue
+			}
+			id := u.Hostname()
+			if id == selfID {
+				continue
+			}
+			scheme := u.Scheme
+			if scheme == "" {
+				scheme = "http"
+			}
+			port := u.Port()
+			if port == "" {
+				port = lbPort
+			}
+			out = append(out, lb.Peer{ID: id, BaseURL: scheme + "://" + u.Hostname() + ":" + port})
 		}
-		u, err := url.Parse(raw)
-		if err != nil || u.Hostname() == "" {
-			continue
-		}
-		id := u.Hostname()
-		if id == selfID {
-			continue
-		}
-		scheme := u.Scheme
-		if scheme == "" {
-			scheme = "http"
-		}
-		out = append(out, lb.Peer{ID: id, BaseURL: scheme + "://" + u.Hostname() + ":" + lbPort})
 	}
 	return self, out
 }
