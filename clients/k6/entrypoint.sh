@@ -1,14 +1,7 @@
 #!/bin/sh
 set -eu
 
-if [ -n "${DISCOVERY_DNS_ADDR:-}" ]; then
-  DNS_ADDR="${DISCOVERY_DNS_ADDR}"
-elif [ -n "${LAPTOP_A_IP:-}" ]; then
-  DNS_ADDR="${LAPTOP_A_IP}:6699"
-else
-  echo "[entrypoint] DISCOVERY_DNS_ADDR is required (or set LAPTOP_A_IP to default to <LAPTOP_A_IP>:6699)" 1>&2
-  exit 1
-fi
+DNS_ADDR="${DISCOVERY_DNS_ADDR:-discovery:6699}"
 LISTEN_ADDR="${DISCOVERY_CLIENT_LISTEN:-127.0.0.1:6700}"
 
 python3 /app/service_discovery_client.py \
