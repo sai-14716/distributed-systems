@@ -197,11 +197,15 @@ func main() {
 	state := &runtimeState{config: initialCfg}
 
 	selfPeer, peers := deriveLBPeers()
+	probeAssignments, err := lb.LoadControllerProbeAssignments(os.Getenv("CONTROLLER_PROBE_CONFIG"))
+	if err != nil {
+		log.Fatalf("load monitor probe config failed: %v", err)
+	}
 	load, err := lb.NewClusterLoad(
 		registry,
 		selfPeer,
 		peers,
-		lb.ClusterLoadOptions{TTL: 5 * time.Second, RefreshEvery: 5 * time.Second},
+		lb.ClusterLoadOptions{TTL: 5 * time.Second, RefreshEvery: 5 * time.Second, ProbeAssignments: probeAssignments},
 		func() time.Duration {
 			ms := state.getConfig().ProbeIntervalMs
 			if ms <= 0 {

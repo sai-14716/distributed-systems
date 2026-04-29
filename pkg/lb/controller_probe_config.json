@@ -1,0 +1,9 @@
+{
+  "assignments": {
+    "node1": ["backend-2", "backend-3", "backend-7"],
+    "node2": ["backend-7", "backend-8", "backend-5"],
+    "node3": ["backend-5", "backend-6", "backend-1"],
+    "node4": ["backend-1", "backend-4", "backend-9"],
+    "node5": ["backend-9", "backend-10", "backend-2"]
+  }
+}

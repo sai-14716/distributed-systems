@@ -66,6 +66,10 @@ type ClusterLoadOptions struct {
 
 	// PeerDownAfter is the local duration after which a peer is treated as down if unheard from.
 	PeerDownAfter time.Duration
+
+	// ProbeAssignments maps LB node IDs to the backend IDs they should probe.
+	// When empty, the embedded controller_probe_config.json is used.
+	ProbeAssignments map[string][]string
 }
 
 func (o *ClusterLoadOptions) withDefaults() ClusterLoadOptions {
@@ -102,12 +106,14 @@ func (o *ClusterLoadOptions) withDefaults() ClusterLoadOptions {
 // - The owner polls the backend and broadcasts updates to every other LB.
 // - Updates are only sent on 10% bucket/status change, plus periodic refreshes (<= TTL).
 type ClusterLoad struct {
-	registry *Registry
-	self     Peer
-	peers    []Peer // includes self
-	opts     ClusterLoadOptions
-	started  time.Time
-	ring     *hashRing
+	registry         *Registry
+	self             Peer
+	peers            []Peer // includes self
+	opts             ClusterLoadOptions
+	started          time.Time
+	ring             *hashRing
+	ownerByBackend   map[string]string
+	probersByBackend map[string]map[string]struct{}
 
 	// getProbeEvery returns how often owners should poll their backends.
 	getProbeEvery func() time.Duration
@@ -120,8 +126,11 @@ type ClusterLoad struct {
 	// state includes only backends owned by this LB.
 	state map[string]*backendState // backend ID -> state
 
-	// view is the merged cluster view used for routing.
-	view map[string]*viewState // backend ID -> last known state
+	// reports keeps the latest known report per backend and prober.
+	reports map[string]map[string]*viewState // backend ID -> prober ID -> state
+
+	// view is the aggregated cluster view used for routing.
+	view map[string]*viewState // backend ID -> aggregated state
 
 	// lastSent tracks per-peer what we've last successfully sent, so we only send deltas.
 	lastSent map[string]map[string]sentState // peerID -> backendID -> state
@@ -167,6 +176,7 @@ type backendState struct {
 
 type sentState struct {
 	lastSent   time.Time
+	ownerID    string
 	lastEpoch  uint64
 	lastBucket int
 	lastStatus LoadStatus
@@ -211,23 +221,30 @@ func NewClusterLoad(registry *Registry, self Peer, peers []Peer, opts ClusterLoa
 	if err != nil {
 		return nil, err
 	}
+	ownerByBackend, probersByBackend := probeMapsFromAssignments(opts.ProbeAssignments, norm)
+	if len(ownerByBackend) == 0 && opts.ProbeAssignments == nil {
+		ownerByBackend, probersByBackend = probeMapsFromAssignments(DefaultControllerProbeAssignments(), norm)
+	}
 
 	cl := &ClusterLoad{
-		registry:      registry,
-		self:          self,
-		peers:         norm,
-		opts:          opts,
-		started:       time.Now(),
-		ring:          ring,
-		getProbeEvery: getProbeEvery,
-		httpProbe:     &http.Client{Timeout: opts.ProbeTimeout},
-		httpGossip:    &http.Client{Timeout: opts.GossipTimeout},
-		state:         map[string]*backendState{},
-		view:          map[string]*viewState{},
-		lastSent:      map[string]map[string]sentState{},
-		lastHeard:     map[string]time.Time{},
-		lastRecv:      map[string]recvSummary{},
-		stop:          make(chan struct{}),
+		registry:         registry,
+		self:             self,
+		peers:            norm,
+		opts:             opts,
+		started:          time.Now(),
+		ring:             ring,
+		ownerByBackend:   ownerByBackend,
+		probersByBackend: probersByBackend,
+		getProbeEvery:    getProbeEvery,
+		httpProbe:        &http.Client{Timeout: opts.ProbeTimeout},
+		httpGossip:       &http.Client{Timeout: opts.GossipTimeout},
+		state:            map[string]*backendState{},
+		reports:          map[string]map[string]*viewState{},
+		view:             map[string]*viewState{},
+		lastSent:         map[string]map[string]sentState{},
+		lastHeard:        map[string]time.Time{},
+		lastRecv:         map[string]recvSummary{},
+		stop:             make(chan struct{}),
 	}
 
 	for _, p := range cl.peers {
@@ -245,8 +262,7 @@ func (c *ClusterLoad) initOwnership() {
 	now := time.Now()
 	backends := c.registry.GetBackends()
 	for _, b := range backends {
-		owner := c.ownerFor(b.ID)
-		if owner != c.self.ID {
+		if !c.shouldProbeBackend(b.ID, c.self.ID) {
 			continue
 		}
 
@@ -265,8 +281,8 @@ func (c *ClusterLoad) initOwnership() {
 			seq:           1,
 			lastPublished: time.Time{},
 		}
-		// Initialize local view as "stale" until first probe succeeds.
-		c.view[b.ID] = &viewState{ownerID: c.self.ID, epoch: 0, seq: 0, status: LoadDown, bucket: 10, active: 0, expires: now.Add(-time.Second)}
+		c.setReportLocked(b.ID, c.self.ID, &viewState{ownerID: c.self.ID, epoch: 0, seq: 0, status: LoadDown, bucket: 10, active: 0, expires: now.Add(-time.Second)})
+		c.view[b.ID] = c.aggregateBackendLocked(b.ID, now)
 	}
 	c.lastHeard[c.self.ID] = now
 }
@@ -330,17 +346,20 @@ func (c *ClusterLoad) Snapshot() LoadViewSnapshot {
 
 	backends := make(map[string]any, len(backendIDs))
 	for _, id := range backendIDs {
-		v := c.view[id]
-		owner := c.ownerFor(id)
+		v := c.aggregateBackendLocked(id, now)
+		probers := c.probersForBackend(id)
 		entry := map[string]any{
-			"owner": owner,
+			"owner":   c.ownerFor(id),
+			"probers": probers,
 			"local_role": func() string {
-				if owner == c.self.ID {
-					return "owner"
+				if c.shouldProbeBackend(id, c.self.ID) {
+					return "prober"
 				}
 				return "none"
 			}(),
-			"owner_alive": c.isPeerAliveLocked(owner, now),
+		}
+		if owner := c.ownerFor(id); owner != "" {
+			entry["owner_alive"] = c.isPeerAliveLocked(owner, now)
 		}
 		if st, ok := c.state[id]; ok && st != nil {
 			entry["local_probe"] = map[string]any{
@@ -372,6 +391,21 @@ func (c *ClusterLoad) Snapshot() LoadViewSnapshot {
 		} else {
 			entry["view"] = nil
 		}
+		reportViews := map[string]any{}
+		for proberID, report := range c.reports[id] {
+			if report == nil {
+				continue
+			}
+			reportViews[proberID] = map[string]any{
+				"epoch":   report.epoch,
+				"seq":     report.seq,
+				"status":  report.status,
+				"bucket":  report.bucket,
+				"active":  report.active,
+				"expires": report.expires,
+			}
+		}
+		entry["reports"] = reportViews
 		backends[id] = entry
 	}
 
@@ -415,11 +449,7 @@ func (c *ClusterLoad) HandleGossip(w http.ResponseWriter, r *http.Request) {
 		if u.BackendID == "" {
 			continue
 		}
-		if msg.From != u.OwnerID {
-			continue
-		}
-		owner := c.ownerFor(u.BackendID)
-		if u.OwnerID != owner {
+		if !c.shouldProbeBackend(u.BackendID, u.OwnerID) {
 			continue
 		}
 		if u.CPUBucket10 < 0 {
@@ -429,9 +459,9 @@ func (c *ClusterLoad) HandleGossip(w http.ResponseWriter, r *http.Request) {
 			u.CPUBucket10 = 20
 		}
 
-		cur := c.view[u.BackendID]
+		cur := c.reportForLocked(u.BackendID, u.OwnerID)
 		if cur == nil || u.Epoch > cur.epoch || (u.Epoch == cur.epoch && u.Seq > cur.seq) {
-			c.view[u.BackendID] = &viewState{
+			c.setReportLocked(u.BackendID, u.OwnerID, &viewState{
 				ownerID: u.OwnerID,
 				epoch:   u.Epoch,
 				seq:     u.Seq,
@@ -439,13 +469,15 @@ func (c *ClusterLoad) HandleGossip(w http.ResponseWriter, r *http.Request) {
 				bucket:  u.CPUBucket10,
 				active:  u.ActiveRequests,
 				expires: now.Add(c.opts.TTL),
-			}
+			})
+			c.view[u.BackendID] = c.aggregateBackendLocked(u.BackendID, now)
 			applied++
 			continue
 		}
 		// Heartbeat/refresh: same seq should still extend TTL (bounded by owner sending).
 		if cur.ownerID == u.OwnerID && cur.epoch == u.Epoch && cur.seq == u.Seq {
 			cur.expires = now.Add(c.opts.TTL)
+			c.view[u.BackendID] = c.aggregateBackendLocked(u.BackendID, now)
 		}
 	}
 
@@ -515,26 +547,12 @@ func (c *ClusterLoad) isPeerAliveLocked(peerID string, now time.Time) bool {
 func (c *ClusterLoad) shouldPublishLocked(backendID string, st *backendState, now time.Time) bool {
 	_ = st
 	_ = now
-	return c.self.ID == c.ownerFor(backendID)
+	return c.shouldProbeBackend(backendID, c.self.ID)
 }
 
 func (c *ClusterLoad) ensureEpochForPublishLocked(backendID string, st *backendState) {
-	cur := c.view[backendID]
-	if cur == nil {
-		return
-	}
-	// If we are about to publish but have observed a higher epoch for this backend, bump epoch to win.
-	if cur.ownerID != c.self.ID && cur.epoch >= st.epoch {
-		prevOwner := cur.ownerID
-		prevEpoch := cur.epoch
-		st.epoch = cur.epoch + 1
-		st.seq = 1
-		st.pubBucket = -1
-		st.pubStatus = ""
-		st.lastPublished = time.Time{}
-
-		log.Printf("[lb-load] event=owner_reclaim self=%s backend=%s prev_owner=%s prev_epoch=%d new_epoch=%d", c.self.ID, backendID, prevOwner, prevEpoch, st.epoch)
-	}
+	_ = backendID
+	_ = st
 }
 
 func (c *ClusterLoad) runProbeLoop(backendID string) {
@@ -630,11 +648,10 @@ func (c *ClusterLoad) recordProbe(backendID string, bucket int, active int32, st
 	st.lastActive = active
 	st.lastStatus = status
 
-	// Only the owner updates shared view and publishes gossip for this backend.
+	// Each configured prober contributes one report; the aggregate view is used for routing.
 	if c.shouldPublishLocked(backendID, st, now) {
 		c.ensureEpochForPublishLocked(backendID, st)
-		// Keep local view fresh for our own routing decisions, even between gossips.
-		c.view[backendID] = &viewState{
+		c.setReportLocked(backendID, c.self.ID, &viewState{
 			ownerID: c.self.ID,
 			epoch:   st.epoch,
 			seq:     st.seq,
@@ -642,7 +659,8 @@ func (c *ClusterLoad) recordProbe(backendID string, bucket int, active int32, st
 			bucket:  bucket,
 			active:  active,
 			expires: now.Add(c.opts.TTL),
-		}
+		})
+		c.view[backendID] = c.aggregateBackendLocked(backendID, now)
 	}
 	if changed {
 		log.Printf("[lb-load] event=probe self=%s backend=%s bucket=%d status=%s active=%d", c.self.ID, backendID, bucket, status, active)
@@ -666,6 +684,7 @@ func (c *ClusterLoad) runGossipLoop() {
 func (c *ClusterLoad) gossipOnce() {
 	type pubSnap struct {
 		backendID string
+		ownerID   string
 		epoch     uint64
 		seq       uint64
 		bucket    int
@@ -697,12 +716,33 @@ func (c *ClusterLoad) gossipOnce() {
 
 		published = append(published, pubSnap{
 			backendID: id,
+			ownerID:   c.self.ID,
 			epoch:     st.epoch,
 			seq:       st.seq,
 			bucket:    st.lastBucket,
 			status:    st.lastStatus,
 			active:    st.lastActive,
 		})
+	}
+
+	for id, byProber := range c.reports {
+		for proberID, v := range byProber {
+			if v == nil || proberID == c.self.ID || !v.expires.After(now) {
+				continue
+			}
+			if !c.shouldProbeBackend(id, proberID) {
+				continue
+			}
+			published = append(published, pubSnap{
+				backendID: id,
+				ownerID:   proberID,
+				epoch:     v.epoch,
+				seq:       v.seq,
+				bucket:    v.bucket,
+				status:    v.status,
+				active:    v.active,
+			})
+		}
 	}
 
 	peers := make([]Peer, 0, len(c.peers))
@@ -723,8 +763,10 @@ func (c *ClusterLoad) gossipOnce() {
 			c.lastSent[p.ID] = sentMap
 		}
 		for _, st := range published {
-			prev := sentMap[st.backendID]
+			key := sentKey(st.backendID, st.ownerID)
+			prev := sentMap[key]
 			needsDelta := prev.lastSeq == 0 ||
+				prev.ownerID != st.ownerID ||
 				prev.lastEpoch != st.epoch ||
 				prev.lastBucket != st.bucket ||
 				prev.lastStatus != st.status ||
@@ -735,7 +777,7 @@ func (c *ClusterLoad) gossipOnce() {
 			}
 			updates = append(updates, LoadUpdate{
 				BackendID:      st.backendID,
-				OwnerID:        c.self.ID,
+				OwnerID:        st.ownerID,
 				Epoch:          st.epoch,
 				Seq:            st.seq,
 				Status:         st.status,
@@ -759,8 +801,9 @@ func (c *ClusterLoad) gossipOnce() {
 		c.mu.Lock()
 		sentMap = c.lastSent[p.ID]
 		for _, u := range updates {
-			sentMap[u.BackendID] = sentState{
+			sentMap[sentKey(u.BackendID, u.OwnerID)] = sentState{
 				lastSent:   now,
+				ownerID:    u.OwnerID,
 				lastEpoch:  u.Epoch,
 				lastBucket: u.CPUBucket10,
 				lastStatus: u.Status,
@@ -820,7 +863,8 @@ func (c *ClusterLoad) applyToRegistry() {
 	defer c.mu.Unlock()
 
 	for _, b := range backends {
-		st := c.view[b.ID]
+		st := c.aggregateBackendLocked(b.ID, now)
+		c.view[b.ID] = st
 		healthy := false
 		bucket := 10
 
@@ -844,8 +888,142 @@ func (c *ClusterLoad) applyToRegistry() {
 }
 
 func (c *ClusterLoad) ownerFor(backendID string) string {
+	if c != nil {
+		if owner := c.ownerByBackend[backendID]; owner != "" {
+			return owner
+		}
+	}
 	if c == nil || c.ring == nil {
 		return ""
 	}
 	return c.ring.owner(backendID)
+}
+
+func (c *ClusterLoad) shouldProbeBackend(backendID, peerID string) bool {
+	if c == nil || backendID == "" || peerID == "" {
+		return false
+	}
+	if probers := c.probersByBackend[backendID]; len(probers) > 0 {
+		_, ok := probers[peerID]
+		return ok
+	}
+	return c.ownerFor(backendID) == peerID
+}
+
+func (c *ClusterLoad) probersForBackend(backendID string) []string {
+	if c == nil {
+		return nil
+	}
+	if probers := c.probersByBackend[backendID]; len(probers) > 0 {
+		out := make([]string, 0, len(probers))
+		for id := range probers {
+			out = append(out, id)
+		}
+		sort.Strings(out)
+		return out
+	}
+	if owner := c.ownerFor(backendID); owner != "" {
+		return []string{owner}
+	}
+	return nil
+}
+
+func (c *ClusterLoad) reportForLocked(backendID, proberID string) *viewState {
+	if c == nil || c.reports == nil {
+		return nil
+	}
+	return c.reports[backendID][proberID]
+}
+
+func (c *ClusterLoad) setReportLocked(backendID, proberID string, report *viewState) {
+	if c.reports[backendID] == nil {
+		c.reports[backendID] = map[string]*viewState{}
+	}
+	c.reports[backendID][proberID] = report
+}
+
+func (c *ClusterLoad) aggregateBackendLocked(backendID string, now time.Time) *viewState {
+	reports := c.reports[backendID]
+	if len(reports) == 0 {
+		return nil
+	}
+
+	var bestUp *viewState
+	var bestDown *viewState
+	for proberID, report := range reports {
+		if report == nil || !report.expires.After(now) || !c.isPeerAliveLocked(proberID, now) {
+			continue
+		}
+		if report.status == LoadUp {
+			if bestUp == nil || report.bucket < bestUp.bucket || (report.bucket == bestUp.bucket && report.expires.After(bestUp.expires)) {
+				bestUp = report
+			}
+			continue
+		}
+		if bestDown == nil || report.expires.After(bestDown.expires) {
+			bestDown = report
+		}
+	}
+	if bestUp != nil {
+		return cloneViewState(bestUp)
+	}
+	if bestDown != nil {
+		return cloneViewState(bestDown)
+	}
+	return nil
+}
+
+func cloneViewState(v *viewState) *viewState {
+	if v == nil {
+		return nil
+	}
+	cp := *v
+	return &cp
+}
+
+func sentKey(backendID, ownerID string) string {
+	return backendID + "\x00" + ownerID
+}
+
+func probeMapsFromAssignments(assignments map[string][]string, peers []Peer) (map[string]string, map[string]map[string]struct{}) {
+	if len(assignments) == 0 {
+		return nil, nil
+	}
+
+	peerIDs := make(map[string]struct{}, len(peers))
+	for _, p := range peers {
+		if p.ID != "" {
+			peerIDs[p.ID] = struct{}{}
+		}
+	}
+
+	probersByBackend := map[string]map[string]struct{}{}
+	for ownerID, backendIDs := range assignments {
+		if _, ok := peerIDs[ownerID]; !ok {
+			continue
+		}
+		for _, backendID := range backendIDs {
+			if backendID == "" {
+				continue
+			}
+			if probersByBackend[backendID] == nil {
+				probersByBackend[backendID] = map[string]struct{}{}
+			}
+			probersByBackend[backendID][ownerID] = struct{}{}
+		}
+	}
+	if len(probersByBackend) == 0 {
+		return nil, nil
+	}
+
+	primaryByBackend := map[string]string{}
+	for backendID, probers := range probersByBackend {
+		ids := make([]string, 0, len(probers))
+		for id := range probers {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		primaryByBackend[backendID] = ids[0]
+	}
+	return primaryByBackend, probersByBackend
 }
