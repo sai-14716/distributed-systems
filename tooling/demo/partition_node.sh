@@ -4,8 +4,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+# Machine C local containers only
+LOCAL_NODES="node4 node5"
+
 usage() {
-  echo "Usage: bash tooling/demo/partition_node.sh isolate|restore node1|node2|node3|node4|node5" >&2
+  echo "Usage: bash tooling/demo/partition_node.sh isolate|restore <node>" >&2
+  echo "  Local nodes on this machine: $LOCAL_NODES" >&2
   exit 2
 }
 
@@ -14,19 +18,19 @@ node="${2:-}"
 [[ "$action" == "isolate" || "$action" == "restore" ]] || usage
 [[ -n "$node" ]] || usage
 
-node_ip() {
-  case "$1" in
-    node1) echo "10.10.0.11" ;;
-    node2) echo "10.10.0.12" ;;
-    node3) echo "10.10.0.13" ;;
-    node4) echo "10.10.0.14" ;;
-    node5) echo "10.10.0.15" ;;
-    *) return 1 ;;
-  esac
-}
+# Verify the node is local to this machine
+is_local=false
+for ln in $LOCAL_NODES; do
+  if [[ "$node" == "$ln" ]]; then
+    is_local=true
+    break
+  fi
+done
 
-if ! ip="$(node_ip "$node")"; then
-  usage
+if [[ "$is_local" != "true" ]]; then
+  echo "Error: $node is not a local container on this machine." >&2
+  echo "This machine only controls: $LOCAL_NODES" >&2
+  exit 1
 fi
 
 project="${COMPOSE_PROJECT_NAME:-distributed-systems}"
@@ -56,7 +60,7 @@ else
     echo "$node is already connected to $network"
     exit 0
   fi
-  echo "Reconnecting $node to $network (ip=$ip, alias=$node)"
-  docker network connect --ip "$ip" --alias "$node" "$network" "$cid"
+  echo "Reconnecting $node to $network (alias=$node)"
+  docker network connect --alias "$node" "$network" "$cid"
   echo "Done. $node is back on the cluster network."
 fi

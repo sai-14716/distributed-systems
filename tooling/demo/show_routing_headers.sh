@@ -3,8 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+export PYTHONPATH="$ROOT_DIR"
 
-URL="${1:-http://127.0.0.1:8001/chat}"
+URL="${1:-$(python3 tooling/cluster_helper.py get_url load_balancers node1)/chat}"
 N="${2:-5}"
 
 echo "url=$URL n=$N"

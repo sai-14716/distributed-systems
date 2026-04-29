@@ -1,0 +1,35 @@
+laptops:
+  A: 10.5.15.20
+  B: 10.5.15.19
+  C: 10.5.15.231
+
+nodes:
+  node1: { laptop: A, port: 19091 }
+  node2: { laptop: A, port: 19092 }
+  node3: { laptop: B, port: 19093 }
+  node4: { laptop: C, port: 19094 }
+  node5: { laptop: C, port: 19095 }
+
+backends:
+  backend-1: { laptop: A, port: 8081 }
+  backend-2: { laptop: A, port: 8082 }
+  backend-3: { laptop: A, port: 8083 }
+  backend-4: { laptop: B, port: 8084 }
+  backend-5: { laptop: B, port: 8085 }
+  backend-6: { laptop: B, port: 8086 }
+  backend-7: { laptop: B, port: 8087 }
+  backend-8: { laptop: C, port: 8088 }
+  backend-9: { laptop: C, port: 8089 }
+  backend-10: { laptop: C, port: 8090 }
+
+discovery:
+  laptop: B
+  udp_port: 6699
+  http_port: 6701
+
+load_balancers:
+  node1: { laptop: A, port: 8001 }
+  node2: { laptop: A, port: 8002 }
+  node3: { laptop: B, port: 8003 }
+  node4: { laptop: C, port: 8004 }
+  node5: { laptop: C, port: 8005 }

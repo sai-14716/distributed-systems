@@ -6,19 +6,28 @@ import time
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from tooling.cluster_helper import get_config
+
 def _default_registry():
-    # Default matches docker-compose static IPs on the sdnet network.
-    return {
-        "api.service.com": deque([
-            {"ip": "10.10.0.11", "port": 8000, "id": "node1"},
-            {"ip": "10.10.0.12", "port": 8000, "id": "node2"},
-            {"ip": "10.10.0.13", "port": 8000, "id": "node3"},
-            {"ip": "10.10.0.14", "port": 8000, "id": "node4"},
-            {"ip": "10.10.0.15", "port": 8000, "id": "node5"},
-        ])
-    }
-
-
+    try:
+        cfg = get_config()
+        lbs = deque()
+        for name in sorted(cfg.get("load_balancers", {}).keys()):
+            info = cfg["load_balancers"][name]
+            ip = cfg["laptops"][info["laptop"]]
+            lbs.append({"ip": ip, "port": info["port"], "id": name})
+        return {"api.service.com": lbs}
+    except Exception as e:
+        print(f"Warning: could not load from cluster_helper: {e}")
+        return {
+            "api.service.com": deque([
+                {"ip": "127.0.0.1", "port": 8001, "id": "node1"},
+                {"ip": "127.0.0.1", "port": 8002, "id": "node2"},
+                {"ip": "127.0.0.1", "port": 8003, "id": "node3"},
+                {"ip": "127.0.0.1", "port": 8004, "id": "node4"},
+                {"ip": "127.0.0.1", "port": 8005, "id": "node5"},
+            ])
+        }
 def _load_registry_from_env():
     raw = os.getenv("DNS_REGISTRY_JSON", "").strip()
     if not raw:

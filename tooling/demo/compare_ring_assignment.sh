@@ -3,11 +3,30 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+export PYTHONPATH="$ROOT_DIR"
 
-LB_URL="${1:-http://127.0.0.1:8001}"
+# Machine C local containers
+LOCAL_NODES="node4 node5"
+
+LB_URL="${1:-$(python3 tooling/cluster_helper.py get_url load_balancers node4)}"
 NODE_TO_TOGGLE="${2:-node5}"
 OUT_DIR="${3:-/tmp}"
 WAIT_SECS="${WAIT_SECS:-5}"
+
+# Verify the node to toggle is local
+is_local=false
+for ln in $LOCAL_NODES; do
+  if [[ "$NODE_TO_TOGGLE" == "$ln" ]]; then
+    is_local=true
+    break
+  fi
+done
+
+if [[ "$is_local" != "true" ]]; then
+  echo "Error: $NODE_TO_TOGGLE is not a local container on this machine." >&2
+  echo "This machine only controls: $LOCAL_NODES" >&2
+  exit 1
+fi
 
 mkdir -p "$OUT_DIR"
 

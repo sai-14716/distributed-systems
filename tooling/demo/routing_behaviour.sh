@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+export PYTHONPATH="$ROOT_DIR"
 
 ALGO="${1:-}"
 ITERATIONS="${2:-5}"
@@ -14,6 +15,8 @@ if [[ -z "$ALGO" ]]; then
   exit 1
 fi
 
+LB_BASE_URL="${LB_BASE_URL:-$(python3 tooling/cluster_helper.py get_url load_balancers node4)}"
+
 docker compose --profile tools run --rm admin -algorithm "$ALGO" -timeout 30s
 
 echo "algorithm=$ALGO session_id=$SESSION_ID"
@@ -23,7 +26,7 @@ for _ in $(seq 1 "$ITERATIONS"); do
     sid="${SESSION_ID}-${_}"
   fi
   backend=$(
-    curl -s -D - -o /dev/null -H "X-Session-ID: $sid" http://127.0.0.1:8001/chat \
+    curl -s -D - -o /dev/null -H "X-Session-ID: $sid" "$LB_BASE_URL/chat" \
       | awk 'tolower($1) == "x-lb-backend:" {print $2}' | tr -d '\r'
   )
   if [[ -n "$backend" ]]; then

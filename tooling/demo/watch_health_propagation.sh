@@ -10,7 +10,7 @@ set -euo pipefail
 #   <status> b<bucket> a<active> e<epoch>/<seq>
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "$ROOT_DIR"
+export PYTHONPATH="$ROOT_DIR"
 
 SECS="${1:-15}"
 
@@ -19,15 +19,15 @@ import json
 import sys
 import time
 import urllib.request
+from tooling.cluster_helper import get_config, get_url
 
 secs = int(sys.argv[1])
-lbs = [
-    ("node1", "http://127.0.0.1:8001/admin/load-view"),
-    ("node2", "http://127.0.0.1:8002/admin/load-view"),
-    ("node3", "http://127.0.0.1:8003/admin/load-view"),
-    ("node4", "http://127.0.0.1:8004/admin/load-view"),
-    ("node5", "http://127.0.0.1:8005/admin/load-view"),
-]
+cfg = get_config()
+
+lbs = []
+for n in sorted(cfg.get("load_balancers", {}).keys()):
+    url = get_url("load_balancers", n, cfg)
+    lbs.append((n, f"{url}/admin/load-view"))
 
 def fetch(url):
     with urllib.request.urlopen(url, timeout=1.5) as r:

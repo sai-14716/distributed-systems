@@ -3,8 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+export PYTHONPATH="$ROOT_DIR"
 
-LB_URL="${1:-http://127.0.0.1:8001}"
+LB_URL="${1:-$(python3 tooling/cluster_helper.py get_url load_balancers node1)}"
 REQUESTS="${2:-15}"
 LOAD_SECS="${3:-60}"
 PHASE_SECS="${4:-0.5}"

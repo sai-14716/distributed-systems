@@ -1,0 +1,321 @@
+# Objective
+
+Refactor ALL bash scripts (and embedded Python code) to operate correctly in a multi-machine distributed deployment instead of a single-machine Docker setup.
+
+Scripts must:
+
+* Work across 3 laptops (A, B, C)
+* Use real machine IPs and exposed ports
+* Be fully topology-aware
+* Support querying nodes, backends, discovery, and any future services
+
+---
+
+# Core Problem
+
+Current scripts assume:
+
+* All services are reachable via:
+
+  ```
+  127.0.0.1:<port>
+  ```
+* All services run on the same machine
+* Node/backend identities map directly to localhost ports
+
+These assumptions are invalid in a distributed setup.
+
+---
+
+# Source of Truth: cluster_config.yaml
+
+All scripts MUST use a shared config file for topology.
+
+Example:
+
+```yaml
+laptops:
+  A: <LAPTOP_A_IP>
+  B: <LAPTOP_B_IP>
+  C: <LAPTOP_C_IP>
+
+nodes:
+  node1: { laptop: A, port: 19091 }
+  node2: { laptop: A, port: 19092 }
+  node3: { laptop: B, port: 19093 }
+  node4: { laptop: C, port: 19094 }
+  node5: { laptop: C, port: 19095 }
+
+backends:
+  backend-1: { laptop: A, port: 8081 }
+  backend-2: { laptop: A, port: 8082 }
+  backend-3: { laptop: A, port: 8083 }
+  backend-4: { laptop: B, port: 8084 }
+  backend-5: { laptop: B, port: 8085 }
+  backend-6: { laptop: B, port: 8086 }
+  backend-7: { laptop: B, port: 8087 }
+  backend-8: { laptop: C, port: 8088 }
+  backend-9: { laptop: C, port: 8089 }
+  backend-10:{ laptop: C, port: 8090 }
+
+discovery:
+  laptop: A
+  udp_port: 6699
+  http_port: 6701
+
+load_balancers:
+  node1: { laptop: A, port: 8001 }
+  node2: { laptop: A, port: 8002 }
+  node3: { laptop: B, port: 8003 }
+  node4: { laptop: C, port: 8004 }
+  node5: { laptop: C, port: 8005 }
+```
+
+---
+
+# Mandatory Refactor Rules
+
+## 1. Eliminate localhost assumptions
+
+Remove ALL occurrences of:
+
+* `127.0.0.1`
+* `localhost`
+
+These must NEVER be used for cluster communication.
+
+---
+
+## 2. Centralize address resolution
+
+Every script must resolve endpoints via config:
+
+```python
+ip = laptops[info["laptop"]]
+port = info["port"]
+url = f"http://{ip}:{port}"
+```
+
+No hardcoded ports or hosts.
+
+---
+
+## 3. Remove hardcoded node/backend lists
+
+Replace:
+
+```python
+nodes = ["node1", "node2"]
+```
+
+with:
+
+```python
+nodes = list(cfg["nodes"].keys())
+```
+
+Same for backends, LBs, etc.
+
+---
+
+## 4. Generalize endpoint usage
+
+Scripts may call different endpoints:
+
+* `/state`
+* `/metrics`
+* `/config`
+* `/health`
+* `/debug/*`
+* backend `/`
+* LB `/route` or `/forward`
+
+DO NOT assume endpoint type.
+
+Instead:
+
+```python
+url = f"{base_url}/{endpoint}"
+```
+
+---
+
+## 5. Support multiple service types
+
+Scripts must support querying:
+
+* nodes (control plane)
+* backends (data plane)
+* load balancers
+* discovery service
+
+Each must be handled via config sections.
+
+---
+
+## 6. Graceful failure handling (REQUIRED)
+
+Cluster may be partially down.
+
+All requests must be wrapped:
+
+```python
+try:
+    ...
+except Exception:
+    mark_as_down()
+```
+
+Never crash entire script.
+
+---
+
+## 7. Timeout discipline
+
+Use short timeouts (0.3–1.0s) for distributed checks.
+
+Do NOT block indefinitely.
+
+---
+
+## 8. Parallelism (IMPORTANT for scale)
+
+If script queries many nodes/backends:
+
+* Use threading or async
+* Avoid sequential blocking calls
+
+Example:
+
+```python
+from concurrent.futures import ThreadPoolExecutor
+```
+
+---
+
+## 9. Output stability
+
+Do NOT change:
+
+* output format
+* column alignment
+* field names
+
+Only change how data is fetched.
+
+---
+
+## 10. Script portability
+
+Scripts must:
+
+* run correctly from ANY laptop (A/B/C)
+* not assume “local ownership” of any service
+
+---
+
+# Required Helper Abstraction
+
+Introduce a reusable helper inside scripts:
+
+```python
+def resolve(service_type, name):
+    info = cfg[service_type][name]
+    ip = laptops[info["laptop"]]
+    return ip, info
+```
+
+Example usage:
+
+```python
+ip, info = resolve("nodes", "node3")
+url = f"http://{ip}:{info['port']}/state"
+```
+
+---
+
+# Discovery Handling
+
+Discovery is special:
+
+```python
+disc = cfg["discovery"]
+ip = laptops[disc["laptop"]]
+udp_addr = f"{ip}:{disc['udp_port']}"
+http_addr = f"http://{ip}:{disc['http_port']}"
+```
+
+All scripts must use this instead of `discovery:port`.
+
+---
+
+# Load Balancer Awareness
+
+If scripts test routing:
+
+* Use `load_balancers` section
+* Do NOT assume LB is local
+
+---
+
+# Backend Awareness
+
+If scripts:
+
+* validate distribution
+* check backend health
+* measure request spread
+
+Then they MUST use:
+
+```python
+cfg["backends"]
+```
+
+---
+
+# Backward Compatibility (Optional but recommended)
+
+If `cluster_config.yaml` is missing:
+
+* fallback to localhost mode
+* OR fail with clear error message
+
+---
+
+# Validation Checklist
+
+After refactor:
+
+* No `127.0.0.1` or `localhost` anywhere
+* All endpoints derived from config
+* Scripts work from any laptop
+* Partial failures handled cleanly
+* Works for nodes + backends + LBs + discovery
+* No hardcoded topology anywhere
+
+---
+
+# Goal
+
+Transform all scripts from:
+
+> single-node debugging tools
+
+into:
+
+> fully distributed cluster observability tools
+
+---
+
+# Key Principle
+
+Topology must be externalized.
+
+Scripts must NEVER assume:
+
+* where services run
+* how many services exist
+* which machine they are on
+
+Everything must come from config.

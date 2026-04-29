@@ -41,9 +41,9 @@ declare -a BACKEND_URLS
 if [[ -n "$BACKEND_URLS_CSV" ]]; then
   IFS=',' read -r -a BACKEND_URLS <<<"$BACKEND_URLS_CSV"
 else
-  for i in $(seq 0 $(( BACKEND_COUNT - 1 ))); do
-    BACKEND_URLS+=("http://127.0.0.1:$(( BACKEND_PORT_BASE + i ))")
-  done
+  export PYTHONPATH="$ROOT_DIR"
+  urls=$(python3 tooling/cluster_helper.py get_all_urls backends)
+  read -r -a BACKEND_URLS <<<"$urls"
 fi
 
 backend_count="${#BACKEND_URLS[@]}"

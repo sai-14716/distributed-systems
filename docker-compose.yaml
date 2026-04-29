@@ -1,84 +1,39 @@
-# Docker Compose Configuration Template for Laptop B
-# This file shows how to configure Laptop B to run node3, node4, and backends 4-7
-#
-# Usage:
-#   LAPTOP_A_IP=192.168.1.100 \
-#   LAPTOP_B_IP=192.168.1.101 \
-#   LAPTOP_C_IP=192.168.1.102 \
-#   docker compose -f docker-compose.laptopb.yaml up -d
-#
-# NOTE: Update the IP addresses in cluster_config.yaml first!
-
 services:
-  # Laptop B: Backends 4-7
-  backend-4:
+  # Laptop C: Backends 8-10
+  backend-8:
     build:
       context: .
       dockerfile: services/backend/Dockerfile
     environment:
-      - SERVER_ID=B4
+      - SERVER_ID=C8
     ports:
-      - "8084:8080"
+      - "8088:8080"
     networks:
       - sdnet
 
-  backend-5:
+  backend-9:
     build:
       context: .
       dockerfile: services/backend/Dockerfile
     environment:
-      - SERVER_ID=B5
+      - SERVER_ID=C9
     ports:
-      - "8085:8080"
+      - "8089:8080"
     networks:
       - sdnet
 
-  backend-6:
+  backend-10:
     build:
       context: .
       dockerfile: services/backend/Dockerfile
     environment:
-      - SERVER_ID=B6
+      - SERVER_ID=C10
     ports:
-      - "8086:8080"
+      - "8090:8080"
     networks:
       - sdnet
 
-  backend-7:
-    build:
-      context: .
-      dockerfile: services/backend/Dockerfile
-    environment:
-      - SERVER_ID=B7
-    ports:
-      - "8087:8080"
-    networks:
-      - sdnet
-
-  # Laptop B: Control Plane Node 3
-  # Uses real IPs for peer discovery and self-identification
-  node3:
-    build:
-      context: .
-      dockerfile: cmd/node/Dockerfile
-    environment:
-      NODE_ID: node3
-      HTTP_ADDR: :19090
-      SELF_URL: http://${LAPTOP_B_IP}:19093
-      STATE_FILE: /var/lib/raft/state.json
-      PEERS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_C_IP}:19094,http://${LAPTOP_C_IP}:19095
-      LB_ADDR: :8000
-      LB_CONTROL_ADDR: 127.0.0.1:18080
-      DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
-    volumes:
-      - node3_data:/var/lib/raft
-    ports:
-      - "8003:8000"
-      - "19093:19090"
-    networks:
-      - sdnet
-
-  # Laptop B: Control Plane Node 4
+  # Laptop C: Control Plane Node 4
   node4:
     build:
       context: .
@@ -86,9 +41,11 @@ services:
     environment:
       NODE_ID: node4
       HTTP_ADDR: :19090
-      SELF_URL: http://${LAPTOP_B_IP}:19094
+      SELF_URL: http://${LAPTOP_C_IP}:19094
       STATE_FILE: /var/lib/raft/state.json
-      PEERS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_C_IP}:19094,http://${LAPTOP_C_IP}:19095
+      PEERS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_C_IP}:19095
+      BACKENDS: http://${LAPTOP_A_IP}:8081,http://${LAPTOP_A_IP}:8082,http://${LAPTOP_A_IP}:8083,http://${LAPTOP_B_IP}:8084,http://${LAPTOP_B_IP}:8085,http://${LAPTOP_B_IP}:8086,http://${LAPTOP_B_IP}:8087,http://backend-8:8080,http://backend-9:8080,http://backend-10:8080
+      LB_PEERS: node1=http://${LAPTOP_A_IP}:8001,node2=http://${LAPTOP_A_IP}:8002,node3=http://${LAPTOP_B_IP}:8003,node4=http://${LAPTOP_C_IP}:8004,node5=http://${LAPTOP_C_IP}:8005
       LB_ADDR: :8000
       LB_CONTROL_ADDR: 127.0.0.1:18080
       DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
@@ -100,6 +57,30 @@ services:
     networks:
       - sdnet
 
+  # Laptop C: Control Plane Node 5
+  node5:
+    build:
+      context: .
+      dockerfile: cmd/node/Dockerfile
+    environment:
+      NODE_ID: node5
+      HTTP_ADDR: :19090
+      SELF_URL: http://${LAPTOP_C_IP}:19095
+      STATE_FILE: /var/lib/raft/state.json
+      PEERS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_C_IP}:19094
+      BACKENDS: http://${LAPTOP_A_IP}:8081,http://${LAPTOP_A_IP}:8082,http://${LAPTOP_A_IP}:8083,http://${LAPTOP_B_IP}:8084,http://${LAPTOP_B_IP}:8085,http://${LAPTOP_B_IP}:8086,http://${LAPTOP_B_IP}:8087,http://backend-8:8080,http://backend-9:8080,http://backend-10:8080
+      LB_PEERS: node1=http://${LAPTOP_A_IP}:8001,node2=http://${LAPTOP_A_IP}:8002,node3=http://${LAPTOP_B_IP}:8003,node4=http://${LAPTOP_C_IP}:8004,node5=http://${LAPTOP_C_IP}:8005
+      LB_ADDR: :8000
+      LB_CONTROL_ADDR: 127.0.0.1:18080
+      DATAPLANE_CONTROL_URL: http://127.0.0.1:18080
+    volumes:
+      - node5_data:/var/lib/raft
+    ports:
+      - "8005:8000"
+      - "19095:19090"
+    networks:
+      - sdnet
+
   admin:
     build:
       context: .
@@ -107,13 +88,13 @@ services:
     profiles:
       - tools
     environment:
-      TARGETS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,http://node3:19090,http://node4:19090,http://${LAPTOP_C_IP}:19095
+      TARGETS: http://${LAPTOP_A_IP}:19091,http://${LAPTOP_A_IP}:19092,http://${LAPTOP_B_IP}:19093,http://${LAPTOP_C_IP}:19094,http://${LAPTOP_C_IP}:19095
     networks:
       - sdnet
 
 volumes:
-  node3_data:
   node4_data:
+  node5_data:
 
 networks:
   sdnet:

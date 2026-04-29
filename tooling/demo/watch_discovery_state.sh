@@ -13,8 +13,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+export PYTHONPATH="$ROOT_DIR"
+DISC_BASE=$(python3 tooling/cluster_helper.py get_discovery_http)
+
 SECS="${1:-20}"
-STATE_URL="${2:-http://127.0.0.1:6701/debug/state}"
+STATE_URL="${2:-$DISC_BASE/debug/state}"
 
 python3 - <<'PY' "$SECS" "$STATE_URL"
 import json
