@@ -81,10 +81,7 @@ fi
 
 log "sending config update while dropping leader"
 (
-  docker compose --profile tools run --rm admin \
-    -targets "$TARGETS" \
-    -algorithm "$CONFIG_ALGO_1" \
-    -probe-interval-ms 700
+  submit_config "$CONFIG_ALGO_1" 700 0.8
 ) >"$DRILL_DIR/config_update_during_leader_drop.log" 2>&1 &
 ADMIN_PID="$!"
 
@@ -105,10 +102,7 @@ fi
 log "new leader detected: $NEW_LEADER"
 
 log "running post-failover config update for convergence"
-docker compose --profile tools run --rm admin \
-  -targets "$TARGETS" \
-  -algorithm "$CONFIG_ALGO_2" \
-  -probe-interval-ms 900 \
+submit_config "$CONFIG_ALGO_2" 900 0.8 \
   >"$DRILL_DIR/config_update_after_failover.log" 2>&1
 
 log "dropping backend: $STOP_BACKEND"

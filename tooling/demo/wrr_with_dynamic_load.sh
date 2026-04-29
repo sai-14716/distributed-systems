@@ -21,7 +21,7 @@ if [[ "$REQUESTS" -le 0 || "$LOAD_SECS" -le 0 ]]; then
 fi
 
 echo "setting algorithm to wrr"
-docker compose --profile tools run --rm admin -algorithm wrr -timeout 30s >/dev/null
+submit_config "wrr" 1000 0.8 >/dev/null 2>&1
 
 echo "starting dynamic backend load in background"
 bash tooling/demo/dynamic_backend_load.sh "$LOAD_SECS" "$PHASE_SECS" "$BASE_WORK_MS" "$PEAK_PARALLEL" &

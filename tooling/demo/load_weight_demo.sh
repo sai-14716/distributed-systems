@@ -14,7 +14,7 @@ HOT_WORK_MS="${4:-5000}"
 HOT_REQUESTS="${5:-8}"
 LB_URL="$(get_lb_url "$LB_NODE")"
 
-docker compose --profile tools run --rm admin -algorithm "$ALGO" -timeout 30s >/dev/null
+submit_config "$ALGO" 1000 0.8 >/dev/null 2>&1
 
 print_load_snapshot() {
   python3 - "$LB_URL" <<'PY'

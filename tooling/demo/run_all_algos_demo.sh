@@ -14,7 +14,7 @@ echo "=== 1) Per-request headers by algorithm ==="
 for algo in round_robin maglev least-req wrr least-load; do
   echo
   echo "--- algorithm=$algo ---"
-  docker compose --profile tools run --rm admin -algorithm "$algo" -timeout 30s >/dev/null
+  submit_config "$algo" 1000 0.8 >/dev/null 2>&1
   bash tooling/demo/show_routing_headers.sh "$LB_NODE" "/chat" 1
 done
 

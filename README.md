@@ -13,11 +13,17 @@ Notes:
 Start full stack for client tests:
 docker compose up --build discovery backend-1 backend-2 backend-3 backend-4 backend-5 backend-6 backend-7 backend-8 backend-9 backend-10 node1 node2 node3 node4 node5
 
-Push/load-balancer config through Raft control plane:
-docker compose --profile tools run --rm admin -algorithm maglev
-docker compose --profile tools run --rm admin -algorithm wrr
-docker compose --profile tools run --rm admin -algorithm least-req
-docker compose --profile tools run --rm admin -algorithm least-load
+Push/load-balancer config through Raft control plane (via script helper):
+source tooling/helper/cluster_config.sh
+submit_config "maglev" 1000 0.8
+submit_config "wrr" 1000 0.8
+submit_config "least-req" 1000 0.8
+submit_config "least-load" 1000 0.8
+
+Or submit directly via curl to a node's Raft endpoint:
+curl -sS -X POST "http://10.5.15.20:19091/admin/submit" \
+  -H 'Content-Type: application/json' \
+  -d '{"type":"set_config","data":{"algorithm":"wrr","probe_interval_ms":1000,"health_threshold":0.8}}'
 
 Run one client load container (defaults to stress test):
 docker compose --profile loadtest up --build k6-client
@@ -69,11 +75,12 @@ Start cluster (discovery, backends, 5 node containers with both processes)
 docker compose up -d --build discovery backend-1 backend-2 backend-3 backend-4 backend-5 backend-6 backend-7 backend-8 backend-9 backend-10 node1 node2 node3 node4 node5
 
 Optional: set LB algorithm through Raft control-plane
-docker compose --profile tools run --rm admin -algorithm maglev
-or
-docker compose --profile tools run --rm admin -algorithm wrr
-or
-docker compose --profile tools run --rm admin -algorithm least-req
+source tooling/helper/cluster_config.sh
+submit_config "maglev" 1000 0.8
+# or
+submit_config "wrr" 1000 0.8
+# or
+submit_config "least-req" 1000 0.8
 
 Run default client load test (discovery-proxy path, stress test)
 docker compose --profile loadtest up --build --scale k6-client=10 k6-client
@@ -178,7 +185,7 @@ LEADER=node1
 3. Trigger config update and stop the leader at nearly the same time.
 
 ```bash
-(docker compose --profile tools run --rm admin -algorithm wrr -probe-interval-ms 700 &) \
+(source tooling/helper/cluster_config.sh && submit_config "wrr" 700 0.8 &) \
 ; sleep 0.2 \
 ; docker compose stop "$LEADER" \
 ; wait
@@ -196,7 +203,7 @@ done
 5. Re-run one config update to confirm convergence after failover.
 
 ```bash
-docker compose --profile tools run --rm admin -algorithm least-req -probe-interval-ms 900
+source tooling/helper/cluster_config.sh && submit_config "least-req" 900 0.8
 ```
 
 Expected result:

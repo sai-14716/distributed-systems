@@ -18,9 +18,9 @@ if [[ -z "$ALGO" ]]; then
   exit 1
 fi
 
-echo "Configuring algorithm on local LB control endpoints..."
-if ! docker compose --profile tools run --rm admin -algorithm "$ALGO" -timeout 30s >/dev/null; then
-  echo "(algorithm update skipped: admin command failed)" >&2
+echo "Configuring algorithm via Raft submit..."
+if ! submit_config "$ALGO" 1000 0.8 >/dev/null 2>&1; then
+  echo "(algorithm update skipped: failed to reach leader)" >&2
 fi
 
 # Get the LB URL for testing

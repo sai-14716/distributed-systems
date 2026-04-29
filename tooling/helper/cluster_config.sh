@@ -264,3 +264,50 @@ fetch_json() {
   fetch_url "$url" | jq -r "$jq_filter" 2>/dev/null || echo ""
 }
 
+# Find the active leader node among all configured nodes (for debugging)
+# Usage: find_leader 
+# Returns: leader node name (e.g., "node1")
+find_leader() {
+  local timeout=1
+  for node in $(get_all_nodes); do
+    local state_url
+    state_url="$(get_node_url "$node" "/state")"
+    local role
+    role="$(fetch_json "$state_url" ".role" 2>/dev/null)" || continue
+    if [[ "$role" == "Leader" ]]; then
+      echo "$node"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Submit config change to the Raft cluster
+# Sends to node1 by default; routing automatically forwards to leader if needed
+# Usage: submit_config <algorithm> [probe_interval_ms] [health_threshold] [node]
+# Example: submit_config "wrr" 1000 0.8 [node1]
+submit_config() {
+  local algorithm="${1:-}"
+  local probe_interval_ms="${2:-1000}"
+  local health_threshold="${3:-0.8}"
+  local target_node="${4:-node1}"  # Any node works due to request routing
+  
+  if [[ -z "$algorithm" ]]; then
+    echo "ERROR: algorithm required" >&2
+    return 1
+  fi
+  
+  # Get target node URL (routing forwards to leader if needed)
+  local target_url
+  target_url=$(get_node_url "$target_node" "/admin/submit") || return 1
+  
+  # Submit config via curl
+  echo "[config] Sending to $target_node: algorithm=$algorithm probe_interval_ms=$probe_interval_ms health_threshold=$health_threshold" >&2
+  
+  curl -sS -X POST "$target_url" \
+    -H 'Content-Type: application/json' \
+    -d "{\"type\":\"set_config\",\"data\":{\"algorithm\":\"$algorithm\",\"probe_interval_ms\":$probe_interval_ms,\"health_threshold\":$health_threshold}}" \
+    -w "\nStatus: %{http_code}\n" 2>&1
+}
+
+

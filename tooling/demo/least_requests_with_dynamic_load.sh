@@ -21,7 +21,7 @@ if [[ "$REQUESTS" -le 0 || "$LOAD_SECS" -le 0 ]]; then
 fi
 
 echo "setting algorithm to least-req"
-docker compose --profile tools run --rm admin -algorithm least-req -timeout 30s >/dev/null
+submit_config "least-req" 1000 0.8 >/dev/null 2>&1
 
 echo "starting dynamic backend load in background"
 bash tooling/demo/dynamic_backend_load.sh "$LOAD_SECS" "$PHASE_SECS" "$BASE_WORK_MS" "$PEAK_PARALLEL" &

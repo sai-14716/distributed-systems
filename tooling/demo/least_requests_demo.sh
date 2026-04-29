@@ -11,7 +11,7 @@ source tooling/helper/cluster_config.sh
 LB_NODE="${1:-node1}"
 LB_URL="$(get_lb_url "$LB_NODE")"
 
-docker compose --profile tools run --rm admin -algorithm least-req -timeout 30s >/dev/null
+submit_config "least-req" 1000 0.8 >/dev/null 2>&1
 
 tmpdir="$(mktemp -d)"
 hdr_a="$tmpdir/a.hdr"
