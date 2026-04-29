@@ -78,6 +78,20 @@ func (a *adminMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.URL.Path == "/admin/backends" {
+		w.Header().Set("Content-Type", "application/json")
+		backends := a.registry.GetBackends()
+		backendIDs := make([]string, 0, len(backends))
+		for _, b := range backends {
+			backendIDs = append(backendIDs, b.ID)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"backends": backendIDs,
+			"count":    len(backendIDs),
+		})
+		return
+	}
+
 	a.forwarder.ServeHTTP(w, r)
 }
 
