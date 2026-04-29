@@ -84,14 +84,30 @@ type Registry struct {
 }
 
 func NewRegistry() *Registry {
+	endpoints := []string{"/chat", "/payload", "/encrypt", "/"}
+	allBackends := []string{
+		"backend-1", "backend-2", "backend-3", "backend-4", "backend-5",
+		"backend-6", "backend-7", "backend-8", "backend-9", "backend-10",
+	}
+
+	var rules []StickyRule
+	for _, ep := range endpoints {
+		shuffled := append([]string{}, allBackends...)
+		rand.Shuffle(len(shuffled), func(i, j int) {
+			shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+		})
+		// Assign a random subset of 3 to 7 backends to each endpoint
+		subsetSize := rand.Intn(5) + 3
+		rules = append(rules, StickyRule{
+			PathPrefix: ep,
+			Role:       "",
+			Subset:     shuffled[:subsetSize],
+		})
+	}
+
 	return &Registry{
-		Backends: make([]*Backend, 0),
-		StickyRules: []StickyRule{
-			// Example: /chat requests from any role go to backend-1 or backend-2
-			{PathPrefix: "/chat", Role: "", Subset: []string{"backend-1", "backend-2"}},
-			// /payload goes to backend-3 (heavier compute)
-			{PathPrefix: "/payload", Role: "", Subset: []string{"backend-3"}},
-		},
+		Backends:    make([]*Backend, 0),
+		StickyRules: rules,
 	}
 }
 
