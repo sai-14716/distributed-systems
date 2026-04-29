@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -200,13 +202,26 @@ func (r *Registry) SimulateBackendFailure(id string, healthy bool) {
 // StartController mocks the Controller process.
 // Updates weights (N(0,1)) and prints shared-memory state every second.
 func (r *Registry) StartController() {
+	selfID := os.Getenv("NODE_ID")
+	assignments := DefaultControllerProbeAssignments()
+	r.StartControllerForNode(selfID, assignments)
+}
+
+func (r *Registry) StartControllerForNode(selfID string, assignments map[string][]string) {
 	go func() {
 		client := &http.Client{Timeout: 500 * time.Millisecond}
 		t := time.NewTicker(1 * time.Second)
 		defer t.Stop()
 
+		assigned := backendSetForNode(selfID, assignments)
+		if len(assigned) > 0 {
+			log.Printf("[Controller] node=%s probing assigned backend subset=%v", selfID, sortedBackendIDs(assigned))
+		} else {
+			log.Printf("[Controller] node=%s has no probe subset; legacy controller health probes disabled", selfID)
+		}
+
 		for range t.C {
-			backends := r.GetBackends()
+			backends := r.GetBackendsByID(assigned)
 
 			for _, b := range backends {
 				var active, total int64
@@ -260,5 +275,39 @@ func (r *Registry) GetBackends() []*Backend {
 	defer r.mu.RUnlock()
 	out := make([]*Backend, 0, len(r.Backends))
 	out = append(out, r.Backends...)
+	return out
+}
+
+func (r *Registry) GetBackendsByID(ids map[string]struct{}) []*Backend {
+	if len(ids) == 0 {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]*Backend, 0, len(ids))
+	for _, b := range r.Backends {
+		if _, ok := ids[b.ID]; ok {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+func backendSetForNode(nodeID string, assignments map[string][]string) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, id := range assignments[nodeID] {
+		if id != "" {
+			out[id] = struct{}{}
+		}
+	}
+	return out
+}
+
+func sortedBackendIDs(ids map[string]struct{}) []string {
+	out := make([]string, 0, len(ids))
+	for id := range ids {
+		out = append(out, id)
+	}
+	sort.Strings(out)
 	return out
 }
