@@ -21,7 +21,7 @@ export default function () {
 
   // Service discovery + connection routing is handled by the local forward proxy
   // (service_discovery_client.py). Run k6 with HTTP_PROXY=http://127.0.0.1:6700.
-  const res = http.get(`http://api.service.com:19093/chat`, {
+  const res = http.get(`http://api.service.com:8000/chat`, {
     headers: {
       'X-Client-VU': __VU.toString(),
       'X-Chat-ID': `chat-${__VU}-${__ITER}`,

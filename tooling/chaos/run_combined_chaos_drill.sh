@@ -55,7 +55,7 @@ find_leader() {
 }
 
 log "bringing up cluster"
-docker compose up -d --build discovery backend-1 backend-2 backend-3 backend-4 backend-5 backend-6 backend-7 backend-8 backend-9 backend-10 node1 node2 node3 node4 node5 \
+docker compose up -d --build discovery backend-1 backend-2 backend-3 node1 node2 node3 node4 node5 \
   >"$DRILL_DIR/cluster_up.log" 2>&1
 
 LEADER_BEFORE="$(find_leader || true)"
@@ -68,7 +68,7 @@ log "detected current leader: $LEADER_BEFORE"
 if [[ "$RUN_LOAD" == "1" ]]; then
   log "starting background realistic load"
   (
-    docker compose --profile loadtest run --rm \
+    docker compose run --rm \
       -e DISABLE_PROXY=1 \
       -e K6_SCRIPT=/app/k6/test_realistic_load.js \
       -e LB_BASE_URLS=http://node1:8000,http://node2:8000,http://node3:8000,http://node4:8000,http://node5:8000 \
@@ -79,10 +79,11 @@ fi
 
 log "sending config update while dropping leader"
 (
-  docker compose --profile tools run --rm admin \
+  docker compose run --rm admin \
     -targets "$TARGETS" \
     -algorithm "$CONFIG_ALGO_1" \
-    -probe-interval-ms 700
+    -probe-interval-ms 700 \
+    -health-threshold 0.70
 ) >"$DRILL_DIR/config_update_during_leader_drop.log" 2>&1 &
 ADMIN_PID="$!"
 
@@ -103,10 +104,11 @@ fi
 log "new leader detected: $NEW_LEADER"
 
 log "running post-failover config update for convergence"
-docker compose --profile tools run --rm admin \
+docker compose run --rm admin \
   -targets "$TARGETS" \
   -algorithm "$CONFIG_ALGO_2" \
   -probe-interval-ms 900 \
+  -health-threshold 0.80 \
   >"$DRILL_DIR/config_update_after_failover.log" 2>&1
 
 log "dropping backend: $STOP_BACKEND"

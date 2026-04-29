@@ -81,23 +81,13 @@ func (f *Forwarder) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		log.Printf("[lb-data] trace=%s node=%s role=%s leader=%s method=%s path=%s status=503 reason=no_healthy_backends algo=%s pool_source=%s pool=%s session_key=%s", traceID, nodeID, role, leaderID, req.Method, req.URL.Path, algoName, poolSource, poolIDs, key)
 		return
 	}
-	// Debug/visualization headers: makes algorithm behavior obvious in demos.
 	w.Header().Set("X-LB-Backend", target.ID)
-	w.Header().Set("X-LB-Algorithm", algoName)
-	w.Header().Set("X-LB-Pool-Source", poolSource)
-	w.Header().Set("X-LB-Pool", poolIDs)
-	w.Header().Set("X-LB-Candidates", formatCandidates(pool))
-	w.Header().Set("X-LB-Chosen-Active", fmt.Sprintf("%d", atomic.LoadInt32(&target.Stats.ActiveRequests)))
-	w.Header().Set("X-LB-Chosen-CPU-Bucket", fmt.Sprintf("%d", target.Stats.CPUBucket()))
 
 	// Removed Increment/Decrement active since backends now natively track requests
 	// Propagate real client IP for downstream L7 inspection
 	req.Header.Set("X-Forwarded-For", req.RemoteAddr)
 
 	target.Proxy.ServeHTTP(w, req)
-	log.Printf("[lb-route] trace=%s node=%s algo=%s pool_source=%s pool=%s candidates=%s chosen=%s chosen_active=%d chosen_cpu_bucket=%d",
-		traceID, nodeID, algoName, poolSource, poolIDs, formatCandidates(pool), target.ID, atomic.LoadInt32(&target.Stats.ActiveRequests), target.Stats.CPUBucket(),
-	)
 	log.Printf("[lb-data] trace=%s node=%s role=%s leader=%s method=%s path=%s algo=%s pool_source=%s pool=%s session_key=%s chosen_backend=%s upstream=%s latency_ms=%d", traceID, nodeID, role, leaderID, req.Method, req.URL.Path, algoName, poolSource, poolIDs, key, target.ID, target.URL.String(), time.Since(start).Milliseconds())
 }
 
@@ -124,28 +114,6 @@ func backendIDs(backends []*Backend) string {
 		return "none"
 	}
 	return strings.Join(ids, ",")
-}
-
-func formatCandidates(backends []*Backend) string {
-	if len(backends) == 0 {
-		return "none"
-	}
-	parts := make([]string, 0, len(backends))
-	for _, b := range backends {
-		if b == nil {
-			continue
-		}
-		parts = append(parts, fmt.Sprintf("%s:req=%d:cpu=%d", b.ID, atomic.LoadInt32(&b.Stats.ActiveRequests), b.Stats.CPUBucket()))
-	}
-	if len(parts) == 0 {
-		return "none"
-	}
-	// Keep header small-ish.
-	out := strings.Join(parts, ",")
-	if len(out) > 800 {
-		return out[:800] + "..."
-	}
-	return out
 }
 
 func getenvOr(key, fallback string) string {

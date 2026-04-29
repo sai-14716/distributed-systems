@@ -9,21 +9,21 @@ const (
 )
 
 type LogEntry struct {
-	Index   int     `json:"index"`
-	Term    int     `json:"term"`
-	Command Command `json:"command"`
+	Index   int         `json:"index"`
+	Term    int         `json:"term"`
+	Command Command     `json:"command"`
 }
 
 type Command struct {
-	Type string         `json:"type"`
-	Data map[string]any `json:"data"`
+	Type string          `json:"type"`
+	Data map[string]any  `json:"data"`
 }
 
 type RequestVoteArgs struct {
-	Term         int    `json:"term"`
+	Term         int `json:"term"`
 	CandidateID  string `json:"candidate_id"`
-	LastLogIndex int    `json:"last_log_index"`
-	LastLogTerm  int    `json:"last_log_term"`
+	LastLogIndex int `json:"last_log_index"`
+	LastLogTerm  int `json:"last_log_term"`
 }
 
 type RequestVoteReply struct {
@@ -53,17 +53,18 @@ type SubmitReply struct {
 }
 
 type StateView struct {
-	ID          string `json:"id"`
-	Role        Role   `json:"role"`
-	Term        int    `json:"term"`
-	CommitIndex int    `json:"commit_index"`
-	LastApplied int    `json:"last_applied"`
-	LeaderID    string `json:"leader_id"`
-	Config      Config `json:"config"`
-	LogLen      int    `json:"log_len"`
+	ID          string    `json:"id"`
+	Role        Role      `json:"role"`
+	Term        int       `json:"term"`
+	CommitIndex int       `json:"commit_index"`
+	LastApplied int       `json:"last_applied"`
+	LeaderID    string    `json:"leader_id"`
+	Config      Config    `json:"config"`
+	LogLen      int       `json:"log_len"`
 }
 
 type Config struct {
-	Algorithm       string `json:"algorithm"`
-	ProbeIntervalMs int    `json:"probe_interval_ms"`
+	Algorithm        string  `json:"algorithm"`
+	ProbeIntervalMs  int     `json:"probe_interval_ms"`
+	HealthThreshold  float64 `json:"health_threshold"`
 }
