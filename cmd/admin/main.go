@@ -18,7 +18,6 @@ func main() {
 		targetsArg      = flag.String("targets", getenvDefault("TARGETS", ""), "comma-separated list of node base URLs")
 		algorithm       = flag.String("algorithm", "round_robin", "algorithm name")
 		probeIntervalMs = flag.Int("probe-interval-ms", 1000, "probe interval ms")
-		healthThreshold = flag.Float64("health-threshold", 0.8, "health threshold")
 		deadline        = flag.Duration("timeout", 10*time.Second, "overall timeout")
 	)
 	flag.Parse()
@@ -42,7 +41,6 @@ func main() {
 		Data: map[string]any{
 			"algorithm":         *algorithm,
 			"probe_interval_ms": *probeIntervalMs,
-			"health_threshold":  *healthThreshold,
 		},
 	}
 
@@ -54,14 +52,13 @@ func main() {
 	ok := waitForConfig(client, targets, raft.Config{
 		Algorithm:       *algorithm,
 		ProbeIntervalMs: *probeIntervalMs,
-		HealthThreshold: *healthThreshold,
 	}, *deadline)
 	if !ok {
 		fmt.Println("config did not converge on all nodes")
 		os.Exit(1)
 	}
 
-		fmt.Println("config update committed and applied on all nodes")
+	fmt.Println("config update committed and applied on all nodes")
 }
 
 func parseTargets(s string) []string {
@@ -98,7 +95,7 @@ func waitForLeader(client *http.Client, targets []string, timeout time.Duration)
 
 func submitCommand(client *http.Client, leader string, cmd raft.Command) error {
 	body, _ := json.Marshal(cmd)
-	req, err := http.NewRequest(http.MethodPost, leader+"/client/submit", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, leader+"/admin/submit", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

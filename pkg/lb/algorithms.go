@@ -48,18 +48,11 @@ func (rr *RoundRobin) NextBackend(r *Registry, req *http.Request) *Backend {
 	return pool[idx]
 }
 
-// ---- Least Requests (with session stickiness) ----
+// ---- Least Requests ----
 
 type LeastRequests struct{}
 
 func (lr *LeastRequests) NextBackend(r *Registry, req *http.Request) *Backend {
-	key := sessionKey(req)
-
-	// Check sticky map first
-	if b := r.StickyGet(key); b != nil {
-		return b
-	}
-
 	pool := r.MatchSubset(req.URL.Path, req.Header.Get("X-Role"))
 	if pool == nil {
 		pool = r.GetHealthyBackends()
@@ -79,25 +72,16 @@ func (lr *LeastRequests) NextBackend(r *Registry, req *http.Request) *Backend {
 		}
 	}
 
-	// Record sticky mapping (must be replicated by Raft/Controller team across LBs)
-	r.StickySet(key, best.ID)
 	return best
 }
 
-// ---- Weighted Round Robin (with session stickiness) ----
+// ---- Weighted Round Robin ----
 
 type WeightedRoundRobin struct {
 	mu sync.Mutex
 }
 
 func (wrr *WeightedRoundRobin) NextBackend(r *Registry, req *http.Request) *Backend {
-	key := sessionKey(req)
-
-	// Check sticky map first
-	if b := r.StickyGet(key); b != nil {
-		return b
-	}
-
 	pool := r.MatchSubset(req.URL.Path, req.Header.Get("X-Role"))
 	if pool == nil {
 		pool = r.GetHealthyBackends()
@@ -108,7 +92,7 @@ func (wrr *WeightedRoundRobin) NextBackend(r *Registry, req *http.Request) *Back
 
 	totalWeight := 0.0
 	for _, b := range pool {
-		totalWeight += b.Stats.Weight
+		totalWeight += b.Stats.Weight()
 	}
 
 	wrr.mu.Lock()
@@ -118,7 +102,7 @@ func (wrr *WeightedRoundRobin) NextBackend(r *Registry, req *http.Request) *Back
 	cur := 0.0
 	var best *Backend
 	for _, b := range pool {
-		cur += b.Stats.Weight
+		cur += b.Stats.Weight()
 		if point <= cur {
 			best = b
 			break
@@ -128,8 +112,35 @@ func (wrr *WeightedRoundRobin) NextBackend(r *Registry, req *http.Request) *Back
 		best = pool[0]
 	}
 
-	// Record sticky mapping (must be replicated by Raft/Controller team across LBs)
-	r.StickySet(key, best.ID)
+	return best
+}
+
+// ---- Least Load (CPU bucket, then active requests) ----
+
+type LeastLoad struct{}
+
+func (ll *LeastLoad) NextBackend(r *Registry, req *http.Request) *Backend {
+	pool := r.MatchSubset(req.URL.Path, req.Header.Get("X-Role"))
+	if pool == nil {
+		pool = r.GetHealthyBackends()
+	}
+	if len(pool) == 0 {
+		return nil
+	}
+
+	best := pool[0]
+	bestBucket := best.Stats.CPUBucket()
+	bestReqs := atomic.LoadInt32(&best.Stats.ActiveRequests)
+	for i := 1; i < len(pool); i++ {
+		b := pool[i]
+		bucket := b.Stats.CPUBucket()
+		reqs := atomic.LoadInt32(&b.Stats.ActiveRequests)
+		if bucket < bestBucket || (bucket == bestBucket && reqs < bestReqs) {
+			best = b
+			bestBucket = bucket
+			bestReqs = reqs
+		}
+	}
 	return best
 }
 

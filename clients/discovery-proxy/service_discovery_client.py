@@ -27,7 +27,8 @@ def _sse_broadcast(event: dict):
             _sse_clients.remove(d)
 
 # ── DNS ────────────────────────────────────────────────────────────────────────
-DNS_SERVER = ("127.0.0.1", 6699)
+
+DNS_SERVER = (os.getenv("LAPTOP_A_IP"), 6699)
 
 HOP_BY_HOP_HEADERS = {
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",

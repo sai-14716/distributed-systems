@@ -1,25 +1,25 @@
 package raft
 
 import (
-    "bytes"
-    "context"
-    "encoding/json"
-    "errors"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
-    "math/rand"
-    "net/http"
+	"math/rand"
+	"net/http"
 	"os"
 	"path/filepath"
-    "sync"
-    "time"
+	"sync"
+	"time"
 )
 
 const (
 	heartbeatInterval = 100 * time.Millisecond
-	electionMin      = 300 * time.Millisecond
-	electionMax      = 600 * time.Millisecond
-	submitTimeout    = 3 * time.Second
+	electionMin       = 300 * time.Millisecond
+	electionMax       = 600 * time.Millisecond
+	submitTimeout     = 3 * time.Second
 )
 
 var errNotLeader = errors.New("not leader")
@@ -68,14 +68,14 @@ type persistedState struct {
 
 func NewNode(id, addr string, peers []string, stateFile string) *Node {
 	n := &Node{
-		id:      id,
-		addr:    addr,
-		peers:   peers,
-		role:    Follower,
-		term:    0,
-		votedFor: "",
-		leaderID: "",
-		log: []LogEntry{{Index: 0, Term: 0, Command: Command{Type: "noop"}}},
+		id:          id,
+		addr:        addr,
+		peers:       peers,
+		role:        Follower,
+		term:        0,
+		votedFor:    "",
+		leaderID:    "",
+		log:         []LogEntry{{Index: 0, Term: 0, Command: Command{Type: "noop"}}},
 		commitIndex: 0,
 		lastApplied: 0,
 		nextIndex:   map[string]int{},
@@ -83,7 +83,6 @@ func NewNode(id, addr string, peers []string, stateFile string) *Node {
 		config: Config{
 			Algorithm:       "round_robin",
 			ProbeIntervalMs: 1000,
-			HealthThreshold: 0.8,
 		},
 		electionReset: time.Now(),
 		stopCh:        make(chan struct{}),
@@ -511,15 +510,12 @@ func (n *Node) applyEntry(entry LogEntry) {
 		if v, ok := entry.Command.Data["probe_interval_ms"].(float64); ok {
 			cfg.ProbeIntervalMs = int(v)
 		}
-		if v, ok := entry.Command.Data["health_threshold"].(float64); ok {
-			cfg.HealthThreshold = v
-		}
 		n.mu.Lock()
 		n.config = cfg
 		obs := append([]func(Config){}, n.configObservers...)
 		n.persistLocked()
 		n.mu.Unlock()
-		n.logf("applied config algorithm=%s probe_interval_ms=%d health_threshold=%.3f", cfg.Algorithm, cfg.ProbeIntervalMs, cfg.HealthThreshold)
+		n.logf("applied config algorithm=%s probe_interval_ms=%d", cfg.Algorithm, cfg.ProbeIntervalMs)
 		for _, fn := range obs {
 			fn(cfg)
 		}

@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	crypto_rand "crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -40,6 +42,9 @@ func trackRequests(h http.HandlerFunc) http.HandlerFunc {
 		h(w, r)
 	}
 }
+
+var activeRequests int32
+var inflightSem chan struct{}
 
 func ensureTraceID(r *http.Request, w http.ResponseWriter) string {
 	traceID := r.Header.Get("X-Trace-ID")
@@ -103,6 +108,17 @@ func main() {
 		port = "8080"
 	}
 
+	workDefaultMs := getenvInt("WORK_MS", 50)
+	maxInflight := getenvInt("MAX_INFLIGHT", 100)
+	cpuSampleMs := getenvInt("CPU_SAMPLE_MS", 250)
+	cpuAlpha := getenvFloat("CPU_EWMA_ALPHA", 0.2)
+
+	sampler := newCPUSampler(time.Duration(cpuSampleMs)*time.Millisecond, cpuAlpha)
+	if maxInflight < 1 {
+		maxInflight = 1
+	}
+	inflightSem = make(chan struct{}, maxInflight)
+
 	// ---------------- HEALTH ----------------
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Slow") == "true" {
@@ -120,16 +136,39 @@ func main() {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"status": "OK", "active_requests": %d, "total_requests": %d, "cpu": %.2f}`, 
+		fmt.Fprintf(w, `{"status": "OK", "active_requests": %d, "total_requests": %d, "cpu": %.2f}`,
 			atomic.LoadInt32(&backendActiveRequests), atomic.LoadInt64(&backendTotalRequests), cpuPct)
 
 		logBackendRequest(serverID, r, http.StatusOK, "health=true heartbeat")
+	})
+
+	// /internal/load - for LB load polling (10% CPU buckets; no global-clock semantics required)
+	http.HandleFunc("/internal/load", func(w http.ResponseWriter, r *http.Request) {
+		ensureTraceID(r, w)
+		cpuPct := sampler.CPUPct()
+		bucket := cpuBucket5(cpuPct)
+		w.Header().Set("X-Server-ID", serverID)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":              true,
+			"server_id":       serverID,
+			"cpu_pct":         cpuPct,
+			"cpu_bucket":      bucket,
+			"active_requests": atomic.LoadInt32(&activeRequests),
+		})
+		logBackendRequest(serverID, r, http.StatusOK, fmt.Sprintf("endpoint=internal/load cpu_pct=%.1f bucket=%d step=5%%", cpuPct, bucket))
 	})
 
 	// ---------------- CHAT ----------------
 	http.HandleFunc("/chat", trackRequests(func(w http.ResponseWriter, r *http.Request) {
 		traceID := ensureTraceID(r, w)
 		r.Header.Set("X-Trace-ID", traceID)
+		if !tryAcquireInflight(w, r, serverID) {
+			return
+		}
+		defer releaseInflight()
+		atomic.AddInt32(&activeRequests, 1)
+		defer atomic.AddInt32(&activeRequests, -1)
 
 		chatID := r.Header.Get("X-Chat-ID")
 
@@ -154,6 +193,7 @@ func main() {
 			rearranged = "[no words received to rearrange]"
 		}
 
+		burnCPU(workDuration(r, workDefaultMs))
 		w.Header().Set("X-Server-ID", serverID)
 
 		content := fmt.Sprintf("<p><strong>Server:</strong> %s</p><p><strong>Chat ID:</strong> %s</p><p><strong>Rearranged words:</strong></p><pre style=\"background:#eee;padding:10px;border-radius:4px;\">%s</pre>",
@@ -209,6 +249,12 @@ func main() {
 
 		traceID := ensureTraceID(r, w)
 		r.Header.Set("X-Trace-ID", traceID)
+		if !tryAcquireInflight(w, r, serverID) {
+			return
+		}
+		defer releaseInflight()
+		atomic.AddInt32(&activeRequests, 1)
+		defer atomic.AddInt32(&activeRequests, -1)
 
 		msg := readMessage(r)
 
@@ -232,6 +278,7 @@ func main() {
 		stream := cipher.NewCFBEncrypter(block, iv)
 		stream.XORKeyStream(ciphertext[aes.BlockSize:], plaintext)
 
+		burnCPU(workDuration(r, workDefaultMs))
 		w.Header().Set("X-Server-ID", serverID)
 
 		content := fmt.Sprintf("<p><strong>Server:</strong> %s</p><p><strong>Plain text:</strong> %s</p><p><strong>Encrypted (Hex):</strong></p><pre style=\"background:#eee;padding:10px;border-radius:4px;word-break:break-all;\">%s</pre>",
@@ -245,6 +292,14 @@ func main() {
 	http.HandleFunc("/", trackRequests(func(w http.ResponseWriter, r *http.Request) {
 		traceID := ensureTraceID(r, w)
 		r.Header.Set("X-Trace-ID", traceID)
+		if !tryAcquireInflight(w, r, serverID) {
+			return
+		}
+		defer releaseInflight()
+		atomic.AddInt32(&activeRequests, 1)
+		defer atomic.AddInt32(&activeRequests, -1)
+
+		burnCPU(workDuration(r, workDefaultMs))
 
 		w.Header().Set("X-Server-ID", serverID)
 
@@ -258,4 +313,47 @@ func main() {
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		panic(err)
 	}
+}
+
+func tryAcquireInflight(w http.ResponseWriter, r *http.Request, serverID string) bool {
+	select {
+	case inflightSem <- struct{}{}:
+		return true
+	default:
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprint(w, "busy")
+		logBackendRequest(serverID, r, http.StatusServiceUnavailable, "busy=true")
+		return false
+	}
+}
+
+func releaseInflight() {
+	select {
+	case <-inflightSem:
+	default:
+	}
+}
+
+func getenvInt(key string, def int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return def
+	}
+	return n
+}
+
+func getenvFloat(key string, def float64) float64 {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil || f <= 0 || f > 1 {
+		return def
+	}
+	return f
 }

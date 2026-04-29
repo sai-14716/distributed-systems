@@ -28,7 +28,7 @@ if [[ -n "$BUILD_FLAG" ]]; then
   BUILD_ARG=("$BUILD_FLAG")
 fi
 
-docker compose run "${BUILD_ARG[@]}" --rm \
+docker compose --profile loadtest run "${BUILD_ARG[@]}" --rm \
   -e K6_SCRIPT=/app/k6/trace_request.js \
   -e TRACE_ID="$TRACE_ID" \
   k6-client 2>&1 | tee "$TMP_K6_OUTPUT"
@@ -45,7 +45,7 @@ else
 fi
 
 docker compose logs --since "$SINCE_WINDOW" \
-  discovery lb-1 lb-2 lb-3 node1 node2 node3 node4 node5 backend-1 backend-2 backend-3 2>&1 \
+  discovery node1 node2 node3 node4 node5 backend-1 backend-2 backend-3 backend-4 backend-5 backend-6 backend-7 backend-8 backend-9 backend-10 2>&1 \
   | grep "$TRACE_ID" > "$TMP_TRACE_LINES" || true
 
 grep -E '\[client-proxy\]' "$TMP_TRACE_LINES" > "$CLIENT_PROXY_FILE" || true

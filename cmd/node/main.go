@@ -73,7 +73,7 @@ func main() {
 		writeJSON(w, reply)
 	})
 
-	mux.HandleFunc("/client/submit", func(w http.ResponseWriter, r *http.Request) {
+	handleSubmit := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -88,6 +88,15 @@ func main() {
 		var cmd raft.Command
 		if err := json.NewDecoder(bytes.NewReader(raw)).Decode(&cmd); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if err := raft.ValidateCommand(&cmd); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"accepted": false,
+				"error":    err.Error(),
+			})
 			return
 		}
 
@@ -135,7 +144,12 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		_, _ = w.Write(respBody)
-	})
+	}
+
+	// Admin API endpoint for command submission.
+	mux.HandleFunc("/admin/submit", handleSubmit)
+	// Backward-compatible alias used by older clients.
+	mux.HandleFunc("/client/submit", handleSubmit)
 
 	mux.HandleFunc("/state", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -168,7 +182,7 @@ func pushDataplaneConfig(baseURL string, cfg raft.Config, maxAttempts int, delay
 	var lastErr error
 	for i := 0; i < maxAttempts; i++ {
 		if err := applyDataplaneConfig(baseURL, cfg); err == nil {
-			log.Printf("pushed dataplane config: algorithm=%s probe_interval_ms=%d health_threshold=%.3f", cfg.Algorithm, cfg.ProbeIntervalMs, cfg.HealthThreshold)
+			log.Printf("pushed dataplane config: algorithm=%s probe_interval_ms=%d", cfg.Algorithm, cfg.ProbeIntervalMs)
 			return nil
 		} else {
 			lastErr = err
@@ -297,7 +311,7 @@ func discoverLeaderURL(selfURL string, peers []string) string {
 
 func forwardSubmit(leaderURL string, raw []byte) (int, []byte, error) {
 	c := &http.Client{Timeout: 2 * time.Second}
-	req, err := http.NewRequest(http.MethodPost, leaderURL+"/client/submit", bytes.NewReader(raw))
+	req, err := http.NewRequest(http.MethodPost, leaderURL+"/admin/submit", bytes.NewReader(raw))
 	if err != nil {
 		return 0, nil, err
 	}
