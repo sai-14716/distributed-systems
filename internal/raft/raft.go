@@ -20,10 +20,10 @@ import (
 
 const (
 	heartbeatInterval = 200 * time.Millisecond
-	electionMin       = 5000 * time.Millisecond  // Fast 1.5s failover for demos
+	electionMin       = 5000 * time.Millisecond
 	electionMax       = 10000 * time.Millisecond
 	submitTimeout     = 5 * time.Second
-	rpcTimeout        = 400 * time.Millisecond   // Fail fast on dead nodes
+	rpcTimeout        = 1500 * time.Millisecond
 )
 
 var errNotLeader = errors.New("not leader")
@@ -233,13 +233,18 @@ func (n *Node) HandleRequestVote(args RequestVoteArgs) RequestVoteReply {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	// Print the received message along with the real time
+	currentTime := time.Now().Format(time.RFC3339)
+	n.logf("Received RequestVote from %s at %s", args.CandidateID, currentTime)
+	
 	// CRITICAL RAFT RULE: Prevent disruptive servers (asymmetric network partitions).
 	// If we have heard from a valid leader within the minimum election timeout,
 	// we assume the leader is still alive and ignore all vote requests.
 	// This stops isolated nodes (like node 3) from constantly hijacking the cluster.
 	// We also ensure that the Leader itself always rejects disruptive votes.
 	if (time.Since(n.electionReset) < electionMin || n.role == Leader) && n.role != Candidate {
-		n.logf("request-vote rejected from %s (term %d): heard from leader recently", args.CandidateID, args.Term)
+		n.logf("HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH")
+		n.logf("request-hohoyhhyoh rejected from %s (term %d): heard from leader recently", args.CandidateID, args.Term)
 		return RequestVoteReply{Term: n.term, VoteGranted: false}
 	}
 
@@ -316,7 +321,7 @@ func (n *Node) HandleAppendEntries(args AppendEntriesArgs) AppendEntriesReply {
 		n.votedFor = ""
 		n.leaderID = args.LeaderID
 		n.electionReset = time.Now()
-		n.logf("append-entries saw higher term=%d leader=%s", args.Term, args.LeaderID)
+		n.logf("hiii append-entries saw higher term=%d leader=%s", args.Term, args.LeaderID)
 		n.persistLocked()
 	} else {
 		/*
@@ -416,6 +421,7 @@ func (n *Node) runElectionTimer() {
 			}
 
 			if time.Since(n.electionReset) < timeout {
+				n.logf("why is this guy here")
 				n.mu.Unlock()
 				continue
 			}
