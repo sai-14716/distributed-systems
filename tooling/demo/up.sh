@@ -4,17 +4,56 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-# Load cluster config
-source tooling/helper/cluster_config.sh
+# Load cluster config using embedded Python config class
+python3 <<'CONFIGPY'
+import sys, yaml
+from pathlib import Path
+
+def find_config_file():
+    pwd = Path.cwd()
+    for _ in range(5):
+        candidate = pwd / "cluster_config.yaml"
+        if candidate.exists(): return candidate
+        pwd = pwd.parent
+    raise FileNotFoundError("cluster_config.yaml not found")
+
+with open(find_config_file()) as f:
+    config = yaml.safe_load(f)
+
+laptops = config.get("laptops", {})
+for name in ["A", "B", "C"]:
+    env_var = f"LAPTOP_{name}_IP"
+    if name in laptops:
+        print(f"export {env_var}='{laptops[name]}'")
+CONFIGPY
+eval "$(python3 <<'CONFIGPY'
+import sys, yaml
+from pathlib import Path
+
+def find_config_file():
+    pwd = Path.cwd()
+    for _ in range(5):
+        candidate = pwd / "cluster_config.yaml"
+        if candidate.exists(): return candidate
+        pwd = pwd.parent
+    raise FileNotFoundError("cluster_config.yaml not found")
+
+with open(find_config_file()) as f:
+    config = yaml.safe_load(f)
+
+laptops = config.get("laptops", {})
+for name in ["A", "B", "C"]:
+    env_var = f"LAPTOP_{name}_IP"
+    if name in laptops:
+        print(f"export {env_var}='{laptops[name]}'")
+CONFIGPY
+)"
 
 # Compose expects LAPTOP_*_IP variables; derive them from cluster_config.yaml.
-if [[ -z "${LAPTOP_A:-}" || -z "${LAPTOP_B:-}" || -z "${LAPTOP_C:-}" ]]; then
+if [[ -z "${LAPTOP_A_IP:-}" || -z "${LAPTOP_B_IP:-}" || -z "${LAPTOP_C_IP:-}" ]]; then
   echo "ERROR: Missing laptop IPs in cluster_config.yaml (expected laptops A, B, C)" >&2
   exit 1
 fi
-export LAPTOP_A_IP="$LAPTOP_A"
-export LAPTOP_B_IP="$LAPTOP_B"
-export LAPTOP_C_IP="$LAPTOP_C"
 
 CLEAN="${1:-}"
 if [[ "$CLEAN" == "--clean" ]]; then
@@ -30,11 +69,58 @@ echo
 echo "Laptop A is now running."
 echo
 
-# Display endpoints using config
-python3 - <<'PY'
-import sys
-sys.path.insert(0, "tooling/helper")
-from cluster_config import Config
+# Display endpoints using embedded config class
+python3 <<'PY'
+import json, urllib.request, sys, yaml
+from pathlib import Path
+
+def find_config_file():
+    pwd = Path.cwd()
+    for _ in range(5):
+        candidate = pwd / "cluster_config.yaml"
+        if candidate.exists(): return candidate
+        pwd = pwd.parent
+    raise FileNotFoundError("cluster_config.yaml not found")
+
+class Config:
+    def __init__(self, data):
+        self.config = data
+        self.laptops = data.get("laptops", {})
+        self.nodes = data.get("nodes", {})
+        self.backends = data.get("backends", {})
+        self.discovery = data.get("discovery", {})
+    
+    @staticmethod
+    def load():
+        with open(find_config_file()) as f:
+            return Config(yaml.safe_load(f))
+    
+    def get_node_url(self, node_name, endpoint=""):
+        if node_name not in self.nodes: raise ValueError(f"Unknown node: {node_name}")
+        node_info = self.nodes[node_name]
+        laptop, port = node_info.get("laptop"), node_info.get("raft_port")
+        if not laptop or not port: raise ValueError(f"Invalid node: {node_name}")
+        ip = self.laptops.get(laptop)
+        if not ip: raise ValueError(f"Unknown laptop: {laptop}")
+        return f"http://{ip}:{port}{endpoint}"
+    
+    def get_lb_url(self, node_name, endpoint=""):
+        if node_name not in self.nodes: raise ValueError(f"Unknown node: {node_name}")
+        node_info = self.nodes[node_name]
+        laptop, port = node_info.get("laptop"), node_info.get("lb_port")
+        if not laptop or not port: raise ValueError(f"Invalid node: {node_name}")
+        ip = self.laptops.get(laptop)
+        if not ip: raise ValueError(f"Unknown laptop: {laptop}")
+        return f"http://{ip}:{port}{endpoint}"
+    
+    def get_backend_url(self, backend_name, endpoint=""):
+        if backend_name not in self.backends: raise ValueError(f"Unknown backend: {backend_name}")
+        backend_info = self.backends[backend_name]
+        laptop, port = backend_info.get("laptop"), backend_info.get("port")
+        if not laptop or not port: raise ValueError(f"Invalid backend: {backend_name}")
+        ip = self.laptops.get(laptop)
+        if not ip: raise ValueError(f"Unknown laptop: {laptop}")
+        return f"http://{ip}:{port}{endpoint}"
 
 cfg = Config.load()
 
@@ -56,14 +142,8 @@ for backend_name in ["backend-1", "backend-2", "backend-3"]:
     print(f"  {backend_name}: {url}")
 
 print()
-# print("Discovery service:")
-# http_url = cfg.get_discovery_url("http")
-# udp_addr = cfg.get_discovery_url("udp")
-# print(f"  HTTP: {http_url}")
-# print(f"  UDP: {udp_addr}")
-
-print()
 print("Note: To connect other laptops (B, C), update cluster_config.yaml with their IPs")
 print("and start services on those machines with their own docker-compose configurations.")
 PY
+
 

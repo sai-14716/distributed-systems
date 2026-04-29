@@ -4,8 +4,28 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-# Load cluster config and helper functions
-source tooling/helper/cluster_config.sh
+# Load cluster config
+_load_config() {
+  python3 - "$ROOT_DIR/cluster_config.yaml" <<'PY'
+import yaml, sys
+cfg = yaml.safe_load(open(sys.argv[1]))
+for laptop, ip in cfg.get('laptops', {}).items():
+  print(f"export LAPTOP_{laptop}={ip}")
+for node_name, node_info in cfg.get('nodes', {}).items():
+  print(f"export NODE_{node_name}_LAPTOP={node_info.get('laptop', '')}")
+  print(f"export NODE_{node_name}_LB_PORT={node_info.get('lb_port', '')}")
+  print(f"export NODE_{node_name}_RAFT_PORT={node_info.get('raft_port', '')}")
+PY
+}
+eval "$(_load_config)"
+
+get_lb_url() {
+  eval "echo http://\${LAPTOP_\${NODE_$1_LAPTOP}}:\${NODE_$1_LB_PORT}${2:-}"
+}
+
+submit_config() {
+  eval "curl -sS -X POST http://\${LAPTOP_\${NODE_${4:-node1}_LAPTOP}}:\${NODE_${4:-node1}_RAFT_PORT}/admin/submit -H 'Content-Type: application/json' -d '{\"type\":\"set_config\",\"data\":{\"algorithm\":\"$1\",\"probe_interval_ms\":${2:-1000},\"health_threshold\":${3:-0.8}}}' -w '\\nStatus: %{http_code}\\n' 2>&1"
+}
 
 ALGO="${1:-wrr}"           # wrr | least-load
 LB_NODE="${2:-node1}"
@@ -18,14 +38,10 @@ submit_config "$ALGO" 1000 0.8 >/dev/null 2>&1
 
 print_load_snapshot() {
   python3 - "$LB_URL" <<'PY'
-import json
-import sys
-import urllib.request
-
+import json, sys, urllib.request
 url = sys.argv[1].rstrip("/") + "/admin/load-view"
 with urllib.request.urlopen(url, timeout=1.5) as response:
   data = json.loads(response.read().decode("utf-8"))
-
 backends = data.get("backends", {})
 for backend_id in sorted(backends):
   entry = backends.get(backend_id) or {}

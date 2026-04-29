@@ -9,8 +9,6 @@ INTERVAL="${1:-2}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-source tooling/helper/cluster_config.sh
-
 echo "=== Raft State Monitor (node1 & node2) - Updates every ${INTERVAL}s ==="
 echo "Press Ctrl+C to stop"
 echo ""

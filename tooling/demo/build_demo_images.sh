@@ -4,8 +4,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-source tooling/helper/cluster_config.sh
-
 echo "Building demo images..."
 docker compose build
 docker compose --profile tools build admin

@@ -4,8 +4,22 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-# Load cluster config and helper functions
-source tooling/helper/cluster_config.sh
+_load_config() {
+  python3 - "$ROOT_DIR/cluster_config.yaml" <<'PY'
+import yaml, sys
+cfg = yaml.safe_load(open(sys.argv[1]))
+for laptop, ip in cfg.get('laptops', {}).items():
+  print(f"export LAPTOP_{laptop}={ip}")
+for node_name, node_info in cfg.get('nodes', {}).items():
+  print(f"export NODE_{node_name}_LAPTOP={node_info.get('laptop', '')}")
+  print(f"export NODE_{node_name}_RAFT_PORT={node_info.get('raft_port', '')}")
+PY
+}
+eval "$(_load_config)"
+
+submit_config() {
+  eval "curl -sS -X POST http://\${LAPTOP_\${NODE_${4:-node1}_LAPTOP}}:\${NODE_${4:-node1}_RAFT_PORT}/admin/submit -H 'Content-Type: application/json' -d '{\"type\":\"set_config\",\"data\":{\"algorithm\":\"$1\",\"probe_interval_ms\":${2:-1000},\"health_threshold\":${3:-0.8}}}' -w '\\nStatus: %{http_code}\\n' 2>&1"
+}
 
 DRILL_ID="${1:-chaos-$(date +%Y%m%dT%H%M%S)}"
 CONFIG_ALGO_1="${CONFIG_ALGO_1:-wrr}"
