@@ -55,6 +55,8 @@ func main() {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		log.Printf("Received RequestVote RPC: %+v", args)
+
 		reply := node.HandleRequestVote(args)
 		writeJSON(w, reply)
 	})

@@ -10,6 +10,19 @@ bash tooling/demo/watch_raft_elections_detailed.sh
 
 bash tooling/demo/apply_algorithm.sh wrr
 bash tooling/demo/apply_algorithm.sh least-req
+
+curl -sS -X POST "http://10.5.15.20:19091/admin/submit" \
+  -H 'Content-Type: application/json' \
+  -d '{"type":"set_config","data":{"algorithm":"wrr","probe_interval_ms":1000}}'
+
+curl -sS -X POST "http://10.5.15.19:19093/admin/submit" \
+    -H 'Content-Type: application/json' \
+    -d '{"type":"set_config","data":{"algorithm":"wrr","probe_interval_ms":1000}}'
+
+curl -sS -X POST "http://10.5.15.18:19094/admin/submit" \
+    -H 'Content-Type: application/json' \
+    -d '{"type":"set_config","data":{"algorithm":"wrr","probe_interval_ms":1000}}'
+
 bash tooling/demo/show_cluster_status.sh node1 backend-1
 bash tooling/demo/routing_behaviour.sh round_robin node1
 bash tooling/demo/routing_behaviour.sh maglev node1

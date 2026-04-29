@@ -12,4 +12,4 @@ if [[ -z "$ALGO" ]]; then
   exit 1
 fi
 
-docker compose --profile tools run --rm admin -algorithm "$ALGO" -timeout 30s >/dev/null
+docker compose --profile tools run --rm admin -algorithm "$ALGO" -timeout 30s

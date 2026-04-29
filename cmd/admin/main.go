@@ -32,7 +32,7 @@ func main() {
 
 	leader := waitForLeader(client, targets, *deadline)
 	if leader == "" {
-		fmt.Println("failed to detect leader")
+		fmt.Println("broo failed to detect leader")
 		os.Exit(1)
 	}
 
@@ -74,9 +74,11 @@ func parseTargets(s string) []string {
 }
 
 func waitForLeader(client *http.Client, targets []string, timeout time.Duration) string {
+	fmt.Println("waiting for leader among targets:", targets)
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		for _, t := range targets {
+			fmt.Println("checking", t)
 			state, err := getState(client, t)
 			if err != nil {
 				continue
