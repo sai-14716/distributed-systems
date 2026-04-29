@@ -20,10 +20,10 @@ import (
 
 const (
 	heartbeatInterval = 200 * time.Millisecond
-	electionMin       = 5000 * time.Millisecond
-	electionMax       = 10000 * time.Millisecond
+	electionMin       = 2000 * time.Millisecond
+	electionMax       = 4000 * time.Millisecond
 	submitTimeout     = 5 * time.Second
-	rpcTimeout        = 1500 * time.Millisecond
+	rpcTimeout        = 400 * time.Millisecond
 )
 
 var errNotLeader = errors.New("not leader")
@@ -233,6 +233,16 @@ func (n *Node) HandleRequestVote(args RequestVoteArgs) RequestVoteReply {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	// CRITICAL RAFT RULE: Prevent disruptive servers (asymmetric network partitions).
+	// If we have heard from a valid leader within the minimum election timeout,
+	// we assume the leader is still alive and ignore all vote requests.
+	// This stops isolated nodes (like node 3) from constantly hijacking the cluster.
+	// We also ensure that the Leader itself always rejects disruptive votes.
+	if (time.Since(n.electionReset) < electionMin || n.role == Leader) && n.role != Candidate {
+		n.logf("request-vote rejected from %s (term %d): heard from leader recently", args.CandidateID, args.Term)
+		return RequestVoteReply{Term: n.term, VoteGranted: false}
+	}
+
 	if args.Term < n.term {
 		return RequestVoteReply{Term: n.term, VoteGranted: false}
 	}
@@ -242,6 +252,7 @@ func (n *Node) HandleRequestVote(args RequestVoteArgs) RequestVoteReply {
 		n.role = Follower
 		n.votedFor = ""
 		n.leaderID = ""
+		n.electionReset = time.Now()
 		n.logf("request-vote saw higher term=%d from=%s", args.Term, args.CandidateID)
 		n.persistLocked()
 	}
@@ -251,34 +262,13 @@ func (n *Node) HandleRequestVote(args RequestVoteArgs) RequestVoteReply {
 	upToDate := args.LastLogTerm > lastTerm ||
 		(args.LastLogTerm == lastTerm && args.LastLogIndex >= lastIndex)
 
-	canVote := n.votedFor == "" || n.votedFor == args.CandidateID
-
-	if canVote && upToDate {
+	if (n.votedFor == "" || n.votedFor == args.CandidateID) && upToDate {
 		n.votedFor = args.CandidateID
-		n.role = Follower
-		n.leaderID = ""
-
-		// Reset election timer only when actually granting vote.
-		// Do not reset just because a higher-term RequestVote arrived.
 		n.electionReset = time.Now()
-
 		n.logf("vote granted to=%s term=%d", args.CandidateID, n.term)
 		n.persistLocked()
-
 		return RequestVoteReply{Term: n.term, VoteGranted: true}
 	}
-
-	n.logf(
-		"vote rejected for=%s term=%d voted_for=%s up_to_date=%v local_last_index=%d local_last_term=%d candidate_last_index=%d candidate_last_term=%d",
-		args.CandidateID,
-		args.Term,
-		n.votedFor,
-		upToDate,
-		lastIndex,
-		lastTerm,
-		args.LastLogIndex,
-		args.LastLogTerm,
-	)
 
 	return RequestVoteReply{Term: n.term, VoteGranted: false}
 }
@@ -287,77 +277,86 @@ func (n *Node) HandleAppendEntries(args AppendEntriesArgs) AppendEntriesReply {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	// Reject stale term.
-	if args.Term < n.term {
-		return AppendEntriesReply{Term: n.term, Success: false}
-	}
+	/*
+		CRITICAL FIX:
 
-	// Absolute self-RPC guard.
-	// A node must never process its own AppendEntries as an external leader heartbeat.
+		A node must never process its own AppendEntries as an external heartbeat.
+
+		In multi-laptop or Docker setups, the same node may be reachable through
+		different addresses:
+			- http://localhost:8084
+			- http://127.0.0.1:8084
+			- http://192.168.x.x:8084
+			- http://node4:8084
+
+		So even if replicateAll tries to skip self by address, a bad address config
+		can still send the request back to the same node. LeaderID is the stronger
+		identity check.
+	*/
 	if args.LeaderID == n.id {
+		if args.Term > n.term {
+			n.term = args.Term
+			n.votedFor = ""
+			n.persistLocked()
+		}
+
 		return AppendEntriesReply{
 			Term:    n.term,
 			Success: true,
 		}
 	}
 
-	// Higher term always wins. Step down.
+	if args.Term < n.term {
+		return AppendEntriesReply{Term: n.term, Success: false}
+	}
+
 	if args.Term > n.term {
 		n.term = args.Term
 		n.role = Follower
 		n.votedFor = ""
-		n.leaderID = ""
+		n.leaderID = args.LeaderID
 		n.electionReset = time.Now()
 		n.logf("append-entries saw higher term=%d leader=%s", args.Term, args.LeaderID)
 		n.persistLocked()
-	}
+	} else {
+		/*
+			Same term AppendEntries from a different node.
 
-	// Same term, but this node is already leader.
-	// Do NOT step down for equal term AppendEntries.
-	// Only a higher term should force a leader to step down.
-	if args.Term == n.term && n.role == Leader {
-		n.logf(
-			"rejecting same-term AppendEntries from leader=%s while I am leader term=%d",
-			args.LeaderID,
-			n.term,
-		)
+			In standard Raft, if a valid leader sends AppendEntries in the same term,
+			a candidate/follower accepts it and resets election timeout.
 
-		return AppendEntriesReply{
-			Term:    n.term,
-			Success: false,
+			If this node is also Leader in the same term, that indicates split-brain
+			or bad configuration. We step down for safety and log loudly.
+		*/
+		if n.role == Leader {
+			n.logf(
+				"WARNING: same-term AppendEntries from another leader=%s while I am leader term=%d; stepping down",
+				args.LeaderID,
+				n.term,
+			)
 		}
-	}
 
-	// At this point we are follower/candidate receiving AppendEntries
-	// from a valid current-term or higher-term leader.
-	if n.role != Follower {
-		n.logf("stepping down to follower due to AppendEntries from leader=%s term=%d", args.LeaderID, args.Term)
+		n.role = Follower
+		n.leaderID = args.LeaderID
+		n.electionReset = time.Now()
 	}
-
-	n.role = Follower
-	n.leaderID = args.LeaderID
-	n.electionReset = time.Now()
 
 	if args.PrevLogIndex >= len(n.log) {
 		n.logf(
-			"append-entries reject: prev index out of range prev=%d log_len=%d leader=%s",
+			"append-entries reject: prev index out of range prev=%d log_len=%d",
 			args.PrevLogIndex,
 			len(n.log),
-			args.LeaderID,
 		)
-		n.persistLocked()
 		return AppendEntriesReply{Term: n.term, Success: false}
 	}
 
 	if args.PrevLogIndex >= 0 && n.log[args.PrevLogIndex].Term != args.PrevLogTerm {
 		n.logf(
-			"append-entries reject: prev term mismatch prev=%d local_term=%d leader_term=%d leader=%s",
+			"append-entries reject: prev term mismatch prev=%d local_term=%d leader_term=%d",
 			args.PrevLogIndex,
 			n.log[args.PrevLogIndex].Term,
 			args.PrevLogTerm,
-			args.LeaderID,
 		)
-		n.persistLocked()
 		return AppendEntriesReply{Term: n.term, Success: false}
 	}
 
@@ -439,6 +438,11 @@ func (n *Node) runHeartbeatTimer() {
 		case <-ticker.C:
 			n.mu.Lock()
 			isLeader := n.role == Leader
+			if isLeader {
+				// Keep the leader's electionReset fresh so it correctly evaluates the
+				// "prevent disruptive servers" rule in HandleRequestVote.
+				n.electionReset = time.Now()
+			}
 			n.mu.Unlock()
 
 			if isLeader {
